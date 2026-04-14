@@ -41,7 +41,7 @@ function handleSubmit() {
   const payload = {
     ...form.value,
     cost: parseFloat(form.value.cost),
-    nextBillingDate: new Date(form.value.nextBillingDate).toISOString()
+    nextBillingDate: form.value.nextBillingDate  // DateOnly: YYYY-MM-DD
   }
   emit('submit', payload)
   form.value = empty()

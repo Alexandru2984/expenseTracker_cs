@@ -22,8 +22,10 @@ function categoryColor(cat) {
   return CATEGORY_COLORS[cat] ?? 'bg-gray-700/50 text-gray-300'
 }
 
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('ro-RO', {
+function formatDate(dateStr) {
+  // dateStr is YYYY-MM-DD (DateOnly from API)
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('ro-RO', {
     day: '2-digit', month: 'short', year: 'numeric'
   })
 }
