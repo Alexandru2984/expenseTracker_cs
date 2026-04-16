@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,16 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+
+    // ── Configure Forwarded Headers (for Nginx/Proxy) ─────────────────────────
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        // Since we're running in Docker and Nginx is on the host, the proxy is our local network.
+        // Clearing known networks/proxies allows it to trust the X-Forwarded-For from anywhere in the Docker network.
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
 
     // ── Serilog ───────────────────────────────────────────────────────────────
     builder.Host.UseSerilog((ctx, services, cfg) =>
@@ -144,6 +155,8 @@ try
     }
 
     // ── Middleware Pipeline ───────────────────────────────────────────────────
+    app.UseForwardedHeaders();
+
     app.UseExceptionHandler(errApp =>
     {
         errApp.Run(async ctx =>

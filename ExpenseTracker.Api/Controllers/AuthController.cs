@@ -28,8 +28,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
         var trimmedUsername = dto.Username.Trim();
+        var loweredUsername = trimmedUsername.ToLower();
 
-        if (await _db.Users.AnyAsync(u => u.Username == trimmedUsername))
+        if (await _db.Users.AnyAsync(u => u.Username.ToLower() == loweredUsername))
             return Conflict(new ProblemDetails
             {
                 Title = "Username indisponibil.",
@@ -38,7 +39,7 @@ public class AuthController : ControllerBase
 
         var user = new User
         {
-            Username = trimmedUsername,
+            Username = trimmedUsername, // Păstrăm formatul original pentru afișare
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password)
         };
 
@@ -53,8 +54,9 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
+        var loweredUsername = dto.Username.Trim().ToLower();
         var user = await _db.Users
-            .FirstOrDefaultAsync(u => u.Username == dto.Username.Trim());
+            .FirstOrDefaultAsync(u => u.Username.ToLower() == loweredUsername);
 
         if (user is null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new ProblemDetails
@@ -73,7 +75,7 @@ public class AuthController : ControllerBase
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var expiry = DateTime.UtcNow.AddDays(30);
+        var expiry = DateTime.UtcNow.AddHours(2); // Redus de la AddDays(30) la 2 ore
 
         var claims = new[]
         {
