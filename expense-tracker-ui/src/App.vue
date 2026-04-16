@@ -1,10 +1,41 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { subscriptionsApi } from './api.js'
 import SubscriptionForm from './components/SubscriptionForm.vue'
 import SubscriptionList from './components/SubscriptionList.vue'
 import LoginView from './components/LoginView.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
+
+// ── Currency Conversion ───────────────────────────────────────────────────────
+const targetCurrency = ref('RON')
+const availableCurrencies = ['RON', 'EUR', 'USD', 'GBP', 'CHF']
+const ratesToRon = {
+  RON: 1,
+  EUR: 4.97,
+  USD: 4.65,
+  GBP: 5.82,
+  CHF: 5.10
+}
+
+const grandTotalMonthly = computed(() => {
+  if (!summary.value?.byCurrency) return 0
+  let totalRon = 0
+  for (const c of summary.value.byCurrency) {
+    const rate = ratesToRon[c.currency.toUpperCase()] || 1
+    totalRon += c.monthlyTotal * rate
+  }
+  return totalRon / (ratesToRon[targetCurrency.value] || 1)
+})
+
+const grandTotalYearly = computed(() => {
+  if (!summary.value?.byCurrency) return 0
+  let totalRon = 0
+  for (const c of summary.value.byCurrency) {
+    const rate = ratesToRon[c.currency.toUpperCase()] || 1
+    totalRon += c.yearlyTotal * rate
+  }
+  return totalRon / (ratesToRon[targetCurrency.value] || 1)
+})
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const isAuthenticated = ref(!!localStorage.getItem('jwt_token'))
@@ -241,6 +272,29 @@ onMounted(() => {
               <span class="text-xs text-gray-500">/ an</span>
             </div>
             <p class="text-xs text-gray-500 mt-1">{{ c.activeCount }} abonament{{ c.activeCount === 1 ? '' : 'e' }} active</p>
+          </div>
+        </div>
+
+        <!-- Grand Total -->
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p class="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">Total Estimat Toate Valutele</p>
+            <div class="flex items-baseline gap-2">
+              <span class="text-3xl font-bold text-emerald-400">{{ grandTotalMonthly.toFixed(2) }}</span>
+              <span class="text-sm text-gray-500">{{ targetCurrency }} / lună</span>
+            </div>
+            <div class="text-sm text-gray-400 mt-1">
+              ~ {{ grandTotalYearly.toFixed(2) }} {{ targetCurrency }} / an
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Valută conversie (estimativ)</label>
+            <select
+              v-model="targetCurrency"
+              class="bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 w-full sm:w-auto outline-none focus:border-indigo-500 transition"
+            >
+              <option v-for="c in availableCurrencies" :key="c" :value="c">{{ c }}</option>
+            </select>
           </div>
         </div>
 
