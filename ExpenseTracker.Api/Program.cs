@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using ExpenseTracker.Api.Data;
+using ExpenseTracker.Api.Services;
 
 // ── Bootstrap logger (captures startup errors before host is built) ───────────
 Log.Logger = new LoggerConfiguration()
@@ -56,6 +57,10 @@ try
     }
 
     // ── Services ──────────────────────────────────────────────────────────────
+    builder.Services.AddHttpClient();
+    builder.Services.AddMemoryCache();
+    builder.Services.AddScoped<CurrencyService>();
+
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
         {

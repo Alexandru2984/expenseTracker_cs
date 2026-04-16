@@ -33,31 +33,31 @@ function formatDate(dateStr) {
 
 <template>
   <div v-if="subscriptions.length === 0" class="text-center text-gray-500 py-16">
-    Niciun abonament. Adaugă primul! 🚀
+    Niciun abonament găsit. 🚀
   </div>
 
-  <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+  <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
     <div
       v-for="sub in subscriptions"
       :key="sub.id"
-      class="bg-gray-900 border rounded-2xl p-5 flex flex-col gap-3 transition hover:border-indigo-500/50"
-      :class="sub.isActive ? 'border-gray-800' : 'border-gray-800 opacity-50'"
+      class="bg-white dark:bg-gray-900 border rounded-2xl p-5 flex flex-col gap-3 transition hover:border-indigo-500/50 shadow-sm"
+      :class="sub.isActive ? 'border-gray-100 dark:border-gray-800' : 'border-gray-100 dark:border-gray-800 opacity-60'"
     >
       <!-- Header -->
       <div class="flex items-start justify-between gap-2">
         <div>
-          <h3 class="font-semibold text-white text-base leading-tight">{{ sub.name }}</h3>
+          <h3 class="font-bold text-gray-900 dark:text-white text-base leading-tight">{{ sub.name }}</h3>
           <span
             v-if="sub.category"
-            class="inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium"
+            class="inline-block mt-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold"
             :class="categoryColor(sub.category)"
           >
             {{ sub.category }}
           </span>
         </div>
         <span
-          class="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
-          :class="sub.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-700 text-gray-400'"
+          class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold shrink-0"
+          :class="sub.isActive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'"
         >
           {{ sub.isActive ? 'Activ' : 'Inactiv' }}
         </span>
@@ -65,27 +65,27 @@ function formatDate(dateStr) {
 
       <!-- Cost -->
       <div class="flex items-baseline gap-1">
-        <span class="text-2xl font-bold text-white">{{ sub.cost.toFixed(2) }}</span>
-        <span class="text-sm text-gray-400">{{ sub.currency }}</span>
-        <span class="text-xs text-gray-500 ml-1">/ {{ sub.billingPeriod === 'Monthly' ? 'lună' : 'an' }}</span>
+        <span class="text-2xl font-black text-gray-900 dark:text-white">{{ sub.cost.toFixed(2) }}</span>
+        <span class="text-xs font-bold text-gray-400">{{ sub.currency }}</span>
+        <span class="text-[10px] font-bold text-gray-400 uppercase ml-1">/ {{ sub.billingPeriod === 'Monthly' ? 'lună' : 'an' }}</span>
       </div>
 
       <!-- Next billing -->
-      <div class="text-xs text-gray-500">
-        Următoarea plată: <span class="text-gray-300">{{ formatDate(sub.nextBillingDate) }}</span>
+      <div class="text-[11px] text-gray-400 font-medium">
+        Următoarea plată: <span class="text-gray-700 dark:text-gray-300">{{ formatDate(sub.nextBillingDate) }}</span>
       </div>
 
       <!-- Actions -->
       <div class="flex gap-2 pt-1 mt-auto">
         <button
           @click="emit('edit', sub)"
-          class="flex-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white py-1.5 rounded-lg transition"
+          class="flex-1 text-xs font-bold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white py-2 rounded-xl transition"
         >
           Editează
         </button>
         <button
           @click="emit('delete', sub.id)"
-          class="flex-1 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 py-1.5 rounded-lg transition"
+          class="flex-1 text-xs font-bold bg-red-500/5 dark:bg-red-500/10 hover:bg-red-500/10 dark:hover:bg-red-500/20 text-red-500 py-2 rounded-xl transition"
         >
           Șterge
         </button>

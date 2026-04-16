@@ -49,26 +49,26 @@ function handleSubmit() {
 </script>
 
 <template>
-  <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800">
-    <h2 class="text-lg font-semibold text-white mb-5">
+  <div class="bg-white dark:bg-gray-900 rounded-3xl p-6 border border-gray-100 dark:border-gray-800 shadow-xl shadow-indigo-500/5">
+    <h2 class="text-xl font-bold dark:text-white mb-6">
       {{ editingItem ? 'Editează abonament' : 'Abonament nou' }}
     </h2>
 
-    <form @submit.prevent="handleSubmit" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <form @submit.prevent="handleSubmit" class="grid grid-cols-1 sm:grid-cols-2 gap-5">
       <!-- Name -->
       <div class="sm:col-span-2">
-        <label class="block text-xs text-gray-400 mb-1">Nume</label>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Nume</label>
         <input
           v-model="form.name"
           required
           placeholder="Netflix, Spotify, VPS..."
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+          class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition"
         />
       </div>
 
       <!-- Cost -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Cost</label>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Cost</label>
         <input
           v-model="form.cost"
           type="number"
@@ -76,30 +76,31 @@ function handleSubmit() {
           min="0"
           required
           placeholder="0.00"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+          class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition"
         />
       </div>
 
       <!-- Currency -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Valută</label>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Valută</label>
         <select
           v-model="form.currency"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 transition"
+          class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white outline-none focus:ring-2 ring-indigo-500/20 transition"
         >
           <option>RON</option>
           <option>EUR</option>
           <option>USD</option>
           <option>GBP</option>
+          <option>CHF</option>
         </select>
       </div>
 
       <!-- Billing Period -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Frecvență</label>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Frecvență</label>
         <select
           v-model="form.billingPeriod"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 transition"
+          class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white outline-none focus:ring-2 ring-indigo-500/20 transition"
         >
           <option value="Monthly">Lunar</option>
           <option value="Yearly">Anual</option>
@@ -108,22 +109,22 @@ function handleSubmit() {
 
       <!-- Next Billing Date -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Următoarea plată</label>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Următoarea plată</label>
         <input
           v-model="form.nextBillingDate"
           type="date"
           required
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 transition"
+          class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white outline-none focus:ring-2 ring-indigo-500/20 transition"
         />
       </div>
 
       <!-- Category -->
       <div>
-        <label class="block text-xs text-gray-400 mb-1">Categorie</label>
+        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Categorie</label>
         <input
           v-model="form.category"
-          placeholder="Streaming, Hosting, SaaS..."
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+          placeholder="Streaming, SaaS..."
+          class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition"
         />
       </div>
 
@@ -133,24 +134,24 @@ function handleSubmit() {
           id="isActive"
           v-model="form.isActive"
           type="checkbox"
-          class="w-4 h-4 accent-indigo-500"
+          class="w-5 h-5 rounded-lg border-none bg-gray-50 dark:bg-gray-800 text-indigo-600 focus:ring-offset-0 focus:ring-2 ring-indigo-500/20 transition"
         />
-        <label for="isActive" class="text-sm text-gray-300">Activ</label>
+        <label for="isActive" class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Activ</label>
       </div>
 
       <!-- Buttons -->
-      <div class="sm:col-span-2 flex gap-3 pt-1">
+      <div class="sm:col-span-2 flex gap-4 pt-2">
         <button
           type="submit"
-          class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-lg transition"
+          class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
         >
-          {{ editingItem ? 'Salvează' : 'Adaugă' }}
+          {{ editingItem ? 'Salvează modificările' : 'Adaugă abonament' }}
         </button>
         <button
           v-if="editingItem"
           type="button"
           @click="emit('cancel')"
-          class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 rounded-lg transition"
+          class="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold py-3 rounded-xl transition"
         >
           Anulează
         </button>

@@ -1,41 +1,93 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { subscriptionsApi } from './api.js'
 import SubscriptionForm from './components/SubscriptionForm.vue'
 import SubscriptionList from './components/SubscriptionList.vue'
 import LoginView from './components/LoginView.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
+import { Sun, Moon, Search, Download, BarChart3, ListFilter, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
+import { Doughnut } from 'vue-chartjs'
+
+ChartJS.register(ArcElement, Tooltip, Legend)
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+const isDark = ref(localStorage.getItem('theme') !== 'light')
+function toggleTheme() {
+  isDark.value = !isDark.value
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
 
 // ── Currency Conversion ───────────────────────────────────────────────────────
 const targetCurrency = ref('RON')
 const availableCurrencies = ['RON', 'EUR', 'USD', 'GBP', 'CHF']
-const ratesToRon = {
+const ratesToRon = ref({
   RON: 1,
-  EUR: 4.97,
-  USD: 4.65,
-  GBP: 5.82,
-  CHF: 5.10
+  EUR: 0.201,
+  USD: 0.215,
+  GBP: 0.171,
+  CHF: 0.196
+})
+
+async function fetchRates() {
+  try {
+    const res = await subscriptionsApi.getRates()
+    ratesToRon.value = res.data
+  } catch (e) {
+    console.error('Failed to fetch live rates, using fallback.')
+  }
 }
 
 const grandTotalMonthly = computed(() => {
   if (!summary.value?.byCurrency) return 0
   let totalRon = 0
   for (const c of summary.value.byCurrency) {
-    const rate = ratesToRon[c.currency.toUpperCase()] || 1
-    totalRon += c.monthlyTotal * rate
+    const rate = ratesToRon.value[c.currency.toUpperCase()] || 1
+    // API returns 1 RON = X Target. So to get RON: Amount / X
+    totalRon += c.monthlyTotal / rate
   }
-  return totalRon / (ratesToRon[targetCurrency.value] || 1)
+  // To get targetCurrency: totalRon * targetRate
+  return totalRon * (ratesToRon.value[targetCurrency.value] || 1)
 })
 
 const grandTotalYearly = computed(() => {
   if (!summary.value?.byCurrency) return 0
   let totalRon = 0
   for (const c of summary.value.byCurrency) {
-    const rate = ratesToRon[c.currency.toUpperCase()] || 1
-    totalRon += c.yearlyTotal * rate
+    const rate = ratesToRon.value[c.currency.toUpperCase()] || 1
+    totalRon += c.yearlyTotal / rate
   }
-  return totalRon / (ratesToRon[targetCurrency.value] || 1)
+  return totalRon * (ratesToRon.value[targetCurrency.value] || 1)
 })
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+const chartData = computed(() => {
+  if (!subscriptions.value.length) return { labels: [], datasets: [] }
+  
+  const categories = {}
+  subscriptions.value.filter(s => s.isActive).forEach(s => {
+    const cat = s.category || 'Altele'
+    const rate = ratesToRon.value[s.currency.toUpperCase()] || 1
+    const costInRon = s.billingPeriod === 'Yearly' ? (s.cost / 12) / rate : s.cost / rate
+    categories[cat] = (categories[cat] || 0) + costInRon
+  })
+
+  return {
+    labels: Object.keys(categories),
+    datasets: [{
+      backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#06b6d4'],
+      data: Object.values(categories).map(v => v * (ratesToRon.value[targetCurrency.value] || 1))
+    }]
+  }
+})
+
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'bottom', labels: { color: isDark.value ? '#9ca3af' : '#4b5563' } }
+  }
+}
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const isAuthenticated = ref(!!localStorage.getItem('jwt_token'))
@@ -45,6 +97,7 @@ function handleLogin(authData) {
   isAuthenticated.value = true
   currentUser.value = authData.username
   fetchAll()
+  fetchRates()
 }
 
 function handleLogout() {
@@ -54,123 +107,96 @@ function handleLogout() {
   currentUser.value = ''
 }
 
-// Listen for 401 responses from the axios interceptor
-onMounted(() => {
-  window.addEventListener('auth:logout', handleLogout)
-  window.addEventListener('storage', handleStorageChange)
-})
-onUnmounted(() => {
-  window.removeEventListener('auth:logout', handleLogout)
-  window.removeEventListener('storage', handleStorageChange)
-})
-
-// Sync auth state when another tab changes localStorage
-function handleStorageChange(e) {
-  if (e.key === 'jwt_token') {
-    if (!e.newValue) {
-      // Other tab logged out
-      isAuthenticated.value = false
-      currentUser.value = ''
-    } else if (e.newValue !== e.oldValue) {
-      // Other tab logged in (possibly as different user) — reload to sync
-      const newUsername = localStorage.getItem('username')
-      if (newUsername !== currentUser.value) {
-        currentUser.value = newUsername ?? ''
-        isAuthenticated.value = true
-        fetchAll()
-      }
-    }
-  } else if (e.key === 'username' && e.newValue) {
-    currentUser.value = e.newValue
-  }
-}
-
-// ── Data ──────────────────────────────────────────────────────────────────────
+// ── Filters & Pagination ──────────────────────────────────────────────────────
 const subscriptions = ref([])
 const summary = ref(null)
-const editingItem = ref(null)
-const showForm = ref(false)
+const totalItems = ref(0)
 const loading = ref(false)
 const error = ref(null)
 
-// ── Toast notifications ───────────────────────────────────────────────────────
-const toasts = ref([])
+const filters = ref({
+  search: '',
+  sortBy: 'name',
+  sortDesc: false,
+  skip: 0,
+  take: 10
+})
 
-function showToast(message, type = 'error') {
-  const id = Date.now()
-  toasts.value.push({ id, message, type })
-  setTimeout(() => {
-    toasts.value = toasts.value.filter(t => t.id !== id)
-  }, 4000)
-}
+const currentPage = computed(() => Math.floor(filters.value.skip / filters.value.take) + 1)
+const totalPages = computed(() => Math.ceil(totalItems.value / filters.value.take))
 
-// ── Confirm modal ─────────────────────────────────────────────────────────────
-const confirmModal = ref({ visible: false, message: '', resolve: null })
-
-function askConfirm(message) {
-  return new Promise(resolve => {
-    confirmModal.value = { visible: true, message, resolve }
-  })
-}
-
-function onConfirm() {
-  confirmModal.value.resolve(true)
-  confirmModal.value.visible = false
-}
-
-function onCancel() {
-  confirmModal.value.resolve(false)
-  confirmModal.value.visible = false
-}
+watch([() => filters.value.search, () => filters.value.sortBy, () => filters.value.sortDesc], () => {
+  filters.value.skip = 0
+  fetchAll()
+})
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 async function fetchAll() {
+  if (!isAuthenticated.value) return
   loading.value = true
-  error.value = null
   try {
     const [subRes, sumRes] = await Promise.all([
-      subscriptionsApi.getAll(),
+      subscriptionsApi.getAll(filters.value),
       subscriptionsApi.getSummary()
     ])
     subscriptions.value = subRes.data.items
+    totalItems.value = subRes.data.total
     summary.value = sumRes.data
   } catch (e) {
     if (e.response?.status !== 401) {
-      error.value = 'Nu pot contacta API-ul. Asigură-te că backend-ul rulează.'
+      error.value = 'Eroare la contactarea API.'
     }
   } finally {
     loading.value = false
   }
 }
 
-async function handleSubmit(payload) {
+async function handleExport() {
   try {
-    if (editingItem.value) {
-      await subscriptionsApi.update(editingItem.value.id, payload)
-      editingItem.value = null
-      showForm.value = false
-    } else {
-      await subscriptionsApi.create(payload)
-      showForm.value = false
-    }
-    await fetchAll()
+    const res = await subscriptionsApi.exportCsv()
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `abonamente_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   } catch (e) {
-    const msg = e.response?.data?.title ?? e.response?.data?.errors
-      ? Object.values(e.response.data.errors).flat().join(', ')
-      : 'Eroare la salvare. Verifică datele introduse.'
-    showToast(msg)
+    showToast('Eroare la export.')
   }
 }
 
-async function handleDelete(id) {
-  const confirmed = await askConfirm('Sigur ștergi acest abonament?')
-  if (!confirmed) return
+// (rest of existing logic: handleSubmit, handleDelete, handleEdit, handleCancel, toasts, modals...)
+const editingItem = ref(null)
+const showForm = ref(false)
+const toasts = ref([])
+
+function showToast(message, type = 'error') {
+  const id = Date.now()
+  toasts.value.push({ id, message, type })
+  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 4000)
+}
+
+const confirmModal = ref({ visible: false, message: '', resolve: null })
+function askConfirm(message) { return new Promise(resolve => { confirmModal.value = { visible: true, message, resolve } }) }
+function onConfirm() { confirmModal.value.resolve(true); confirmModal.value.visible = false }
+function onCancel() { confirmModal.value.resolve(false); confirmModal.value.visible = false }
+
+async function handleSubmit(payload) {
   try {
-    await subscriptionsApi.remove(id)
+    if (editingItem.value) await subscriptionsApi.update(editingItem.value.id, payload)
+    else await subscriptionsApi.create(payload)
+    editingItem.value = null
+    showForm.value = false
     await fetchAll()
-  } catch (e) {
-    showToast('Eroare la ștergere.')
-  }
+  } catch (e) { showToast('Eroare la salvare.') }
+}
+
+async function handleDelete(id) {
+  const confirmed = await askConfirm('Sigur ștergi?')
+  if (!confirmed) return
+  try { await subscriptionsApi.remove(id); await fetchAll() }
+  catch (e) { showToast('Eroare la ștergere.') }
 }
 
 function handleEdit(item) {
@@ -179,195 +205,155 @@ function handleEdit(item) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function handleCancel() {
-  editingItem.value = null
-  showForm.value = false
-}
+function handleCancel() { editingItem.value = null; showForm.value = false }
 
 onMounted(() => {
-  if (isAuthenticated.value) fetchAll()
+  if (isAuthenticated.value) { fetchAll(); fetchRates() }
 })
 </script>
 
 <template>
-  <!-- Login screen -->
-  <LoginView v-if="!isAuthenticated" @login="handleLogin" />
+  <div :class="{ 'dark': isDark }">
+    <div class="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      <LoginView v-if="!isAuthenticated" @login="handleLogin" />
 
-  <!-- Main app -->
-  <div v-else class="min-h-screen bg-gray-950 text-white">
-    <!-- Confirm modal -->
-    <ConfirmModal
-      v-if="confirmModal.visible"
-      :message="confirmModal.message"
-      confirm-label="Șterge"
-      @confirm="onConfirm"
-      @cancel="onCancel"
-    />
+      <template v-else>
+        <!-- Confirm modal -->
+        <ConfirmModal v-if="confirmModal.visible" :message="confirmModal.message" @confirm="onConfirm" @cancel="onCancel" />
 
-    <!-- Toast notifications -->
-    <div class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm">
-      <TransitionGroup name="toast">
-        <div
-          v-for="toast in toasts"
-          :key="toast.id"
-          class="bg-red-500/90 text-white text-sm px-4 py-3 rounded-xl shadow-lg"
-        >
-          {{ toast.message }}
+        <!-- Toasts -->
+        <div class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm">
+          <TransitionGroup name="toast">
+            <div v-for="t in toasts" :key="t.id" class="bg-red-500 text-white text-sm px-4 py-3 rounded-xl shadow-lg">
+              {{ t.message }}
+            </div>
+          </TransitionGroup>
         </div>
-      </TransitionGroup>
+
+        <!-- Header -->
+        <header class="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur sticky top-0 z-10">
+          <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold text-white">$</div>
+              <span class="font-bold">Expense Tracker</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <button @click="toggleTheme" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                <Sun v-if="isDark" :size="20" />
+                <Moon v-else :size="20" />
+              </button>
+              <button @click="showForm = !showForm; editingItem = null" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg transition">
+                {{ showForm && !editingItem ? '✕ Închide' : '+ Nou' }}
+              </button>
+              <button @click="handleLogout" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Ieșire</button>
+            </div>
+          </div>
+        </header>
+
+        <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
+          <div v-if="error" class="bg-red-500/10 border border-red-500/30 text-red-500 rounded-xl p-4 text-sm">{{ error }}</div>
+
+          <!-- Top Section: Totals & Chart -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 space-y-6">
+              <!-- Summary Grid -->
+              <div v-if="summary" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div v-for="c in summary.byCurrency" :key="c.currency" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 shadow-sm">
+                  <p class="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1">{{ c.currency }}</p>
+                  <div class="flex items-baseline gap-1">
+                    <span class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ c.monthlyTotal.toFixed(2) }}</span>
+                    <span class="text-xs text-gray-400">/ lună</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Grand Total & Converter -->
+              <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Total Estimat (Toate Valutele)</h3>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-4xl font-black text-emerald-500">{{ grandTotalMonthly.toFixed(2) }}</span>
+                      <span class="text-lg font-bold text-gray-400">{{ targetCurrency }} / lună</span>
+                    </div>
+                    <p class="text-sm text-gray-400 mt-1">≈ {{ grandTotalYearly.toFixed(2) }} {{ targetCurrency }} / an</p>
+                  </div>
+                  <div class="w-full md:w-auto">
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Valută Conversie</label>
+                    <select v-model="targetCurrency" class="w-full md:w-32 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 ring-indigo-500/20 transition">
+                      <option v-for="c in availableCurrencies" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm flex flex-col">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <BarChart3 :size="14" /> Analiză Categorii
+              </h3>
+              <div class="relative flex-1 min-h-[200px]">
+                <Doughnut :data="chartData" :options="chartOptions" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Form -->
+          <Transition name="slide">
+            <SubscriptionForm v-if="showForm || editingItem" :editing-item="editingItem" @submit="handleSubmit" @cancel="handleCancel" />
+          </Transition>
+
+          <!-- Main Table Section -->
+          <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex flex-col md:flex-row gap-4 justify-between items-center">
+              <div class="relative w-full md:w-80">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" :size="16" />
+                <input v-model="filters.search" placeholder="Caută abonamente sau categorii..." class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 ring-indigo-500/20 transition" />
+              </div>
+              <div class="flex items-center gap-3 w-full md:w-auto">
+                <select v-model="filters.sortBy" class="bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-3 py-2 text-sm outline-none">
+                  <option value="name">Sortează după Nume</option>
+                  <option value="cost">Sortează după Preț</option>
+                  <option value="nextbillingdate">Sortează după Dată</option>
+                  <option value="category">Sortează după Categorie</option>
+                </select>
+                <button @click="filters.sortDesc = !filters.sortDesc" class="p-2 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                  <ListFilter :size="18" :class="{ 'rotate-180': filters.sortDesc }" />
+                </button>
+                <button @click="handleExport" class="p-2 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-emerald-500/10 text-emerald-500 transition" title="Export CSV">
+                  <Download :size="18" />
+                </button>
+              </div>
+            </div>
+
+            <div v-if="loading" class="p-12 text-center text-gray-400 animate-pulse">Se încarcă datele...</div>
+            <SubscriptionList v-else :subscriptions="subscriptions" @edit="handleEdit" @delete="handleDelete" />
+
+            <!-- Pagination -->
+            <div class="p-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <p class="text-xs text-gray-500">Afișare {{ subscriptions.length }} din {{ totalItems }} abonamente</p>
+              <div class="flex items-center gap-2">
+                <button @click="filters.skip -= filters.take" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
+                  <ChevronLeft :size="18" />
+                </button>
+                <span class="text-xs font-bold">{{ currentPage }} / {{ totalPages }}</span>
+                <button @click="filters.skip += filters.take" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
+                  <ChevronRight :size="18" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </template>
     </div>
-
-    <!-- Nav -->
-    <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">$</div>
-          <span class="font-semibold text-white">Expense Tracker</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            @click="showForm = !showForm; editingItem = null"
-            class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-          >
-            {{ showForm && !editingItem ? '✕ Închide' : '+ Abonament nou' }}
-          </button>
-          <span class="text-xs text-gray-500 hidden sm:inline">{{ currentUser }}</span>
-          <button
-            @click="handleLogout"
-            title="Deconectare"
-            class="text-xs text-gray-500 hover:text-gray-300 px-3 py-2 rounded-lg transition"
-          >
-            Ieșire
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
-
-      <!-- Error -->
-      <div v-if="error" class="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-4 text-sm">
-        {{ error }}
-      </div>
-
-      <!-- Summary Cards (per currency) -->
-      <div v-if="summary">
-        <!-- Per-currency cards -->
-        <div
-          v-if="summary.byCurrency && summary.byCurrency.length"
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4"
-        >
-          <div
-            v-for="c in summary.byCurrency"
-            :key="c.currency"
-            class="bg-gray-900 border border-gray-800 rounded-2xl p-4"
-          >
-            <p class="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">{{ c.currency }}</p>
-            <div class="flex items-baseline gap-2">
-              <span class="text-2xl font-bold text-indigo-400">{{ c.monthlyTotal.toFixed(2) }}</span>
-              <span class="text-xs text-gray-500">/ lună</span>
-            </div>
-            <div class="flex items-baseline gap-2 mt-0.5">
-              <span class="text-base font-semibold text-white">{{ c.yearlyTotal.toFixed(2) }}</span>
-              <span class="text-xs text-gray-500">/ an</span>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">{{ c.activeCount }} abonament{{ c.activeCount === 1 ? '' : 'e' }} active</p>
-          </div>
-        </div>
-
-        <!-- Grand Total -->
-        <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p class="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">Total Estimat Toate Valutele</p>
-            <div class="flex items-baseline gap-2">
-              <span class="text-3xl font-bold text-emerald-400">{{ grandTotalMonthly.toFixed(2) }}</span>
-              <span class="text-sm text-gray-500">{{ targetCurrency }} / lună</span>
-            </div>
-            <div class="text-sm text-gray-400 mt-1">
-              ~ {{ grandTotalYearly.toFixed(2) }} {{ targetCurrency }} / an
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Valută conversie (estimativ)</label>
-            <select
-              v-model="targetCurrency"
-              class="bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 w-full sm:w-auto outline-none focus:border-indigo-500 transition"
-            >
-              <option v-for="c in availableCurrencies" :key="c" :value="c">{{ c }}</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Count cards -->
-        <div class="grid grid-cols-2 gap-4">
-          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <p class="text-xs text-gray-500 mb-1">Abonamente active</p>
-            <p class="text-2xl font-bold text-emerald-400">{{ summary.activeSubscriptions }}</p>
-          </div>
-          <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-            <p class="text-xs text-gray-500 mb-1">Total abonamente</p>
-            <p class="text-2xl font-bold text-white">{{ summary.totalSubscriptions }}</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Form (toggle) -->
-      <Transition name="slide">
-        <SubscriptionForm
-          v-if="showForm || editingItem"
-          :editing-item="editingItem"
-          @submit="handleSubmit"
-          @cancel="handleCancel"
-        />
-      </Transition>
-
-      <!-- List -->
-      <div>
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wider">Abonamente</h2>
-          <button
-            v-if="!loading"
-            @click="fetchAll"
-            class="text-xs text-gray-500 hover:text-gray-300 transition"
-          >
-            ↻ Reîncarcă
-          </button>
-        </div>
-
-        <div v-if="loading" class="text-center text-gray-600 py-16 animate-pulse">
-          Se încarcă...
-        </div>
-
-        <SubscriptionList
-          v-else
-          :subscriptions="subscriptions"
-          @edit="handleEdit"
-          @delete="handleDelete"
-        />
-      </div>
-    </main>
   </div>
 </template>
 
 <style>
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.2s ease;
-}
-.slide-enter-from,
-.slide-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(100%);
-}
+.slide-enter-active, .slide-leave-active { transition: all 0.2s ease; }
+.slide-enter-from, .slide-leave-to { opacity: 0; transform: translateY(-8px); }
+.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(100%); }
 </style>
 

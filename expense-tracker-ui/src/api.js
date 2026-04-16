@@ -30,12 +30,14 @@ export const authApi = {
 }
 
 export const subscriptionsApi = {
-  getAll: (skip = 0, take = 200) => api.get(`/subscriptions?skip=${skip}&take=${take}`),
+  getAll: (params = {}) => api.get('/subscriptions', { params }),
   getById: (id) => api.get(`/subscriptions/${id}`),
   create: (data) => api.post('/subscriptions', data),
   update: (id, data) => api.put(`/subscriptions/${id}`, data),
   remove: (id) => api.delete(`/subscriptions/${id}`),
-  getSummary: () => api.get('/subscriptions/summary')
+  getSummary: () => api.get('/subscriptions/summary'),
+  getRates: () => api.get('/subscriptions/rates'),
+  exportCsv: () => api.get('/subscriptions/export', { responseType: 'blob' })
 }
 
 

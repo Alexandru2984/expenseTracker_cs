@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using ExpenseTracker.Api.Data;
 using ExpenseTracker.Api.Dtos;
 using ExpenseTracker.Api.Models;
+using ExpenseTracker.Api.Services;
 
 namespace ExpenseTracker.Api.Controllers;
 
@@ -15,23 +17,47 @@ namespace ExpenseTracker.Api.Controllers;
 public class SubscriptionsController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly CurrencyService _currencyService;
 
-    public SubscriptionsController(AppDbContext db)
+    public SubscriptionsController(AppDbContext db, CurrencyService currencyService)
     {
         _db = db;
+        _currencyService = currencyService;
     }
 
     private Guid GetUserId() =>
         Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    // GET /api/subscriptions?skip=0&take=50
+    // GET /api/subscriptions?skip=0&take=50&search=xyz&sortBy=cost&sortDesc=true
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int skip = 0, [FromQuery] int take = 50)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int skip = 0, 
+        [FromQuery] int take = 50,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = "name",
+        [FromQuery] bool sortDesc = false)
     {
         take = Math.Min(take, 200);
         var userId = GetUserId();
 
-        var query = _db.Subscriptions.Where(s => s.UserId == userId).OrderBy(s => s.Name);
+        var query = _db.Subscriptions.Where(s => s.UserId == userId);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(s => s.Name.ToLower().Contains(searchLower) || 
+                                     s.Category.ToLower().Contains(searchLower));
+        }
+
+        query = sortBy?.ToLower() switch
+        {
+            "cost" => sortDesc ? query.OrderByDescending(s => s.Cost) : query.OrderBy(s => s.Cost),
+            "nextbillingdate" => sortDesc ? query.OrderByDescending(s => s.NextBillingDate) : query.OrderBy(s => s.NextBillingDate),
+            "category" => sortDesc ? query.OrderByDescending(s => s.Category) : query.OrderBy(s => s.Category),
+            "currency" => sortDesc ? query.OrderByDescending(s => s.Currency) : query.OrderBy(s => s.Currency),
+            _ => sortDesc ? query.OrderByDescending(s => s.Name) : query.OrderBy(s => s.Name)
+        };
+
         var total = await query.CountAsync();
         var items = await query.Skip(skip).Take(take).ToListAsync();
 
@@ -40,6 +66,38 @@ public class SubscriptionsController : ControllerBase
             Items = items.Select(ToDto),
             Total = total
         });
+    }
+
+    // GET /api/subscriptions/rates
+    [HttpGet("rates")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetRates()
+    {
+        var rates = await _currencyService.GetRatesAsync();
+        return Ok(rates);
+    }
+
+    // GET /api/subscriptions/export
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportCsv()
+    {
+        var userId = GetUserId();
+        var items = await _db.Subscriptions.Where(s => s.UserId == userId).OrderBy(s => s.Name).ToListAsync();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Id,Name,Cost,Currency,BillingPeriod,NextBillingDate,Category,IsActive,CreatedAt");
+
+        foreach (var item in items)
+        {
+            // Escape quotes for CSV
+            var name = item.Name.Replace("\"", "\"\"");
+            var category = item.Category.Replace("\"", "\"\"");
+
+            sb.AppendLine($"{item.Id},\"{name}\",{item.Cost.ToString(System.Globalization.CultureInfo.InvariantCulture)},{item.Currency},{item.BillingPeriod},{item.NextBillingDate:yyyy-MM-dd},\"{category}\",{item.IsActive},{item.CreatedAt:yyyy-MM-dd HH:mm:ss}");
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+        return File(bytes, "text/csv", $"abonamente_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv");
     }
 
     // GET /api/subscriptions/{id}
