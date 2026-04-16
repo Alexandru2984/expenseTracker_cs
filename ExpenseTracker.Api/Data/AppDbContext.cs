@@ -9,6 +9,8 @@ public class AppDbContext : DbContext
 
     public DbSet<SubscriptionItem> Subscriptions => Set<SubscriptionItem>();
 
+    public DbSet<User> Users => Set<User>();
+
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -49,6 +51,21 @@ public class AppDbContext : DbContext
 
             entity.Property(e => e.NextBillingDate)
                   .HasColumnType("date");
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Username)
+                  .IsRequired()
+                  .HasMaxLength(50);
+
+            entity.HasIndex(e => e.Username)
+                  .IsUnique();
+
+            entity.Property(e => e.PasswordHash)
+                  .IsRequired();
         });
     }
 }

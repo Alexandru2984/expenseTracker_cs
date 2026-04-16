@@ -1,12 +1,13 @@
 using System.Net;
+using System.Text;
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using ExpenseTracker.Api.Auth;
 using ExpenseTracker.Api.Data;
 
 // ── Bootstrap logger (captures startup errors before host is built) ───────────
@@ -29,10 +30,10 @@ try
     // ── Validate required secrets at startup ──────────────────────────────────
     if (builder.Environment.IsProduction())
     {
-        var apiToken = builder.Configuration["API_TOKEN"];
-        if (string.IsNullOrWhiteSpace(apiToken))
+        var jwtSecret = builder.Configuration["Jwt:Secret"];
+        if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
         {
-            Log.Fatal("API_TOKEN environment variable is not set. Refusing to start in Production.");
+            Log.Fatal("Jwt__Secret environment variable is not set or too short (min 32 chars). Refusing to start in Production.");
             return 1;
         }
         var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -59,9 +60,24 @@ try
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(connectionString));
 
-    // ── Authentication (static bearer token) ─────────────────────────────────
-    builder.Services.AddAuthentication("ApiKey")
-        .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>("ApiKey", _ => { });
+    // ── Authentication (JWT) ──────────────────────────────────────────────────
+    var jwtSecretValue = builder.Configuration["Jwt:Secret"] ?? "dev-jwt-secret-change-me-in-prod-32ch";
+    var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretValue));
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = "ExpenseTracker",
+                ValidAudience = "ExpenseTracker",
+                IssuerSigningKey = jwtKey
+            };
+        });
 
     builder.Services.AddAuthorization();
 

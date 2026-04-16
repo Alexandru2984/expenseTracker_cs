@@ -7,16 +7,20 @@ import LoginView from './components/LoginView.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-const isAuthenticated = ref(!!localStorage.getItem('api_token'))
+const isAuthenticated = ref(!!localStorage.getItem('jwt_token'))
+const currentUser = ref(localStorage.getItem('username') ?? '')
 
-function handleLogin(token) {
-  localStorage.setItem('api_token', token)
+function handleLogin(authData) {
   isAuthenticated.value = true
+  currentUser.value = authData.username
   fetchAll()
 }
 
 function handleLogout() {
+  localStorage.removeItem('jwt_token')
+  localStorage.removeItem('username')
   isAuthenticated.value = false
+  currentUser.value = ''
 }
 
 // Listen for 401 responses from the axios interceptor
@@ -169,6 +173,7 @@ onMounted(() => {
           >
             {{ showForm && !editingItem ? '✕ Închide' : '+ Abonament nou' }}
           </button>
+          <span class="text-xs text-gray-500 hidden sm:inline">{{ currentUser }}</span>
           <button
             @click="handleLogout"
             title="Deconectare"

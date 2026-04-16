@@ -4,9 +4,9 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api'
 })
 
-// Attach Bearer token from localStorage on every request
+// Attach JWT token from localStorage on every request
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('api_token')
+  const token = localStorage.getItem('jwt_token')
   if (token) config.headers['Authorization'] = `Bearer ${token}`
   return config
 })
@@ -16,12 +16,18 @@ api.interceptors.response.use(
   res => res,
   err => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('api_token')
+      localStorage.removeItem('jwt_token')
+      localStorage.removeItem('username')
       window.dispatchEvent(new Event('auth:logout'))
     }
     return Promise.reject(err)
   }
 )
+
+export const authApi = {
+  login: (data) => api.post('/auth/login', data),
+  register: (data) => api.post('/auth/register', data)
+}
 
 export const subscriptionsApi = {
   getAll: (skip = 0, take = 200) => api.get(`/subscriptions?skip=${skip}&take=${take}`),
@@ -31,4 +37,5 @@ export const subscriptionsApi = {
   remove: (id) => api.delete(`/subscriptions/${id}`),
   getSummary: () => api.get('/subscriptions/summary')
 }
+
 
