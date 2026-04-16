@@ -13,10 +13,21 @@ ChartJS.register(ArcElement, Tooltip, Legend)
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const isDark = ref(localStorage.getItem('theme') !== 'light')
+
+function applyTheme() {
+  if (isDark.value) {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+}
+
 function toggleTheme() {
   isDark.value = !isDark.value
   localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
 }
+
+watch(isDark, applyTheme, { immediate: true })
 
 // ── Currency Conversion ───────────────────────────────────────────────────────
 const targetCurrency = ref('RON')
@@ -213,13 +224,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div :class="{ 'dark': isDark }">
-    <div class="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      <LoginView v-if="!isAuthenticated" @login="handleLogin" />
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <LoginView v-if="!isAuthenticated" @login="handleLogin" />
 
-      <template v-else>
-        <!-- Confirm modal -->
-        <ConfirmModal v-if="confirmModal.visible" :message="confirmModal.message" @confirm="onConfirm" @cancel="onCancel" />
+    <template v-else>
+      <!-- Confirm modal -->
+      <ConfirmModal v-if="confirmModal.visible" :message="confirmModal.message" @confirm="onConfirm" @cancel="onCancel" />
 
         <!-- Toasts -->
         <div class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm">
@@ -347,7 +357,6 @@ onMounted(() => {
         </main>
       </template>
     </div>
-  </div>
 </template>
 
 <style>
