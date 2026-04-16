@@ -26,6 +26,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -50,37 +52,15 @@ services:
       - migrate
     restart: "no"
 
-  # ── UI build (init container — populates frontend_dist volume then exits) ─────
+  # ── UI build (builds frontend assets into ./frontend_dist on host) ───────────
   ui-builder:
     build:
       context: ./expense-tracker-ui
     environment:
       DEST: /srv
     volumes:
-      - frontend_dist:/srv
+      - ./frontend_dist:/srv
     restart: "no"
-
-  # ── Caddy (HTTPS termination + reverse proxy + static files) ─────────────────
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - frontend_dist:/srv:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      ui-builder:
-        condition: service_completed_successfully
-      api:
-        condition: service_healthy
 
 volumes:
   postgres_data:
-  frontend_dist:
-  caddy_data:
-  caddy_config:

@@ -27,17 +27,18 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
-        // Allow registration only when no users exist (first-user-wins)
-        if (await _db.Users.AnyAsync())
-            return BadRequest(new ProblemDetails
+        var trimmedUsername = dto.Username.Trim();
+
+        if (await _db.Users.AnyAsync(u => u.Username == trimmedUsername))
+            return Conflict(new ProblemDetails
             {
-                Title = "Înregistrarea este dezactivată.",
-                Detail = "Un utilizator există deja. Contactează administratorul."
+                Title = "Username indisponibil.",
+                Detail = "Acest username este deja utilizat. Alege altul."
             });
 
         var user = new User
         {
-            Username = dto.Username.Trim(),
+            Username = trimmedUsername,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password)
         };
 

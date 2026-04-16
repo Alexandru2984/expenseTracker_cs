@@ -24,8 +24,35 @@ function handleLogout() {
 }
 
 // Listen for 401 responses from the axios interceptor
-onMounted(() => window.addEventListener('auth:logout', handleLogout))
-onUnmounted(() => window.removeEventListener('auth:logout', handleLogout))
+onMounted(() => {
+  window.addEventListener('auth:logout', handleLogout)
+  window.addEventListener('storage', handleStorageChange)
+})
+onUnmounted(() => {
+  window.removeEventListener('auth:logout', handleLogout)
+  window.removeEventListener('storage', handleStorageChange)
+})
+
+// Sync auth state when another tab changes localStorage
+function handleStorageChange(e) {
+  if (e.key === 'jwt_token') {
+    if (!e.newValue) {
+      // Other tab logged out
+      isAuthenticated.value = false
+      currentUser.value = ''
+    } else if (e.newValue !== e.oldValue) {
+      // Other tab logged in (possibly as different user) — reload to sync
+      const newUsername = localStorage.getItem('username')
+      if (newUsername !== currentUser.value) {
+        currentUser.value = newUsername ?? ''
+        isAuthenticated.value = true
+        fetchAll()
+      }
+    }
+  } else if (e.key === 'username' && e.newValue) {
+    currentUser.value = e.newValue
+  }
+}
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const subscriptions = ref([])

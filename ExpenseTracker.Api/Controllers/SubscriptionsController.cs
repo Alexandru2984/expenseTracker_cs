@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -20,13 +21,17 @@ public class SubscriptionsController : ControllerBase
         _db = db;
     }
 
+    private Guid GetUserId() =>
+        Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
     // GET /api/subscriptions?skip=0&take=50
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int skip = 0, [FromQuery] int take = 50)
     {
         take = Math.Min(take, 200);
+        var userId = GetUserId();
 
-        var query = _db.Subscriptions.OrderBy(s => s.Name);
+        var query = _db.Subscriptions.Where(s => s.UserId == userId).OrderBy(s => s.Name);
         var total = await query.CountAsync();
         var items = await query.Skip(skip).Take(take).ToListAsync();
 
@@ -42,7 +47,7 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> GetById(Guid id)
     {
         var item = await _db.Subscriptions.FindAsync(id);
-        if (item is null) return NotFound();
+        if (item is null || item.UserId != GetUserId()) return NotFound();
         return Ok(ToDto(item));
     }
 
@@ -60,7 +65,8 @@ public class SubscriptionsController : ControllerBase
             BillingPeriod = dto.BillingPeriod,
             NextBillingDate = dto.NextBillingDate,
             Category = dto.Category,
-            IsActive = true
+            IsActive = true,
+            UserId = GetUserId()
         };
 
         _db.Subscriptions.Add(item);
@@ -74,7 +80,7 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSubscriptionDto dto)
     {
         var existing = await _db.Subscriptions.FindAsync(id);
-        if (existing is null) return NotFound();
+        if (existing is null || existing.UserId != GetUserId()) return NotFound();
 
         existing.Name = dto.Name;
         existing.Cost = dto.Cost;
@@ -94,7 +100,7 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> Delete(Guid id)
     {
         var item = await _db.Subscriptions.FindAsync(id);
-        if (item is null) return NotFound();
+        if (item is null || item.UserId != GetUserId()) return NotFound();
 
         _db.Subscriptions.Remove(item);
         await _db.SaveChangesAsync();
@@ -105,7 +111,8 @@ public class SubscriptionsController : ControllerBase
     [HttpGet("summary")]
     public async Task<IActionResult> GetSummary()
     {
-        var all = await _db.Subscriptions.ToListAsync();
+        var userId = GetUserId();
+        var all = await _db.Subscriptions.Where(s => s.UserId == userId).ToListAsync();
         var active = all.Where(s => s.IsActive).ToList();
 
         var byCurrency = active

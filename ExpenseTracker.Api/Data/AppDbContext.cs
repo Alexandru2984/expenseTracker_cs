@@ -51,6 +51,13 @@ public class AppDbContext : DbContext
 
             entity.Property(e => e.NextBillingDate)
                   .HasColumnType("date");
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.UserId);
         });
 
         modelBuilder.Entity<User>(entity =>
