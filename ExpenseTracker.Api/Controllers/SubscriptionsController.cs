@@ -33,11 +33,12 @@ public class SubscriptionsController : ControllerBase
     // GET /api/subscriptions?skip=0&take=50&search=xyz&sortBy=cost&sortDesc=true
     [HttpGet]
     public async Task<IActionResult> GetAll(
-        [FromQuery] int skip = 0, 
+        [FromQuery] int skip = 0,
         [FromQuery] int take = 50,
         [FromQuery] string? search = null,
         [FromQuery] string? sortBy = "name",
-        [FromQuery] bool sortDesc = false)
+        [FromQuery] bool sortDesc = false,
+        [FromQuery] string? status = null)
     {
         skip = Math.Max(0, skip);
         take = Math.Clamp(take, 1, 200);
@@ -45,10 +46,17 @@ public class SubscriptionsController : ControllerBase
 
         var query = _db.Subscriptions.Where(s => s.UserId == userId);
 
+        query = status?.ToLower() switch
+        {
+            "active" => query.Where(s => s.IsActive),
+            "inactive" => query.Where(s => !s.IsActive),
+            _ => query
+        };
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var searchLower = search.ToLower();
-            query = query.Where(s => s.Name.ToLower().Contains(searchLower) || 
+            query = query.Where(s => s.Name.ToLower().Contains(searchLower) ||
                                      s.Category.ToLower().Contains(searchLower));
         }
 
@@ -199,11 +207,15 @@ public class SubscriptionsController : ControllerBase
             })
             .OrderBy(x => x.Currency);
 
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var dueThisWeek = active.Count(s => s.NextBillingDate <= today.AddDays(7));
+
         return Ok(new SummaryResponseDto
         {
             ByCurrency = byCurrency,
             ActiveSubscriptions = active.Count,
-            TotalSubscriptions = all.Count
+            TotalSubscriptions = all.Count,
+            DueThisWeek = dueThisWeek
         });
     }
 

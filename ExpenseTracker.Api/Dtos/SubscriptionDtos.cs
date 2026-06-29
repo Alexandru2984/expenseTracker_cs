@@ -74,6 +74,7 @@ public class SummaryResponseDto
     public IEnumerable<CurrencySummary> ByCurrency { get; set; } = Enumerable.Empty<CurrencySummary>();
     public int ActiveSubscriptions { get; set; }
     public int TotalSubscriptions { get; set; }
+    public int DueThisWeek { get; set; }
 }
 
 public class CurrencySummary

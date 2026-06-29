@@ -150,17 +150,32 @@ const filters = ref({
   search: '',
   sortBy: 'name',
   sortDesc: false,
+  status: 'all',
   skip: 0,
   take: 10
 })
 
 const currentPage = computed(() => Math.floor(filters.value.skip / filters.value.take) + 1)
-const totalPages = computed(() => Math.ceil(totalItems.value / filters.value.take))
+const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / filters.value.take)))
 
-watch([() => filters.value.search, () => filters.value.sortBy, () => filters.value.sortDesc], () => {
+const statusOptions = [
+  { value: 'all', label: 'Toate' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' }
+]
+
+watch([
+  () => filters.value.search,
+  () => filters.value.sortBy,
+  () => filters.value.sortDesc,
+  () => filters.value.status
+], () => {
   filters.value.skip = 0
   fetchAll()
 })
+
+// Page changes only move the offset — refetch when it does.
+watch(() => filters.value.skip, fetchAll)
 
 // ── API calls ─────────────────────────────────────────────────────────────────
 async function fetchAll() {
@@ -193,6 +208,8 @@ async function handleExport() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    showToast('Export CSV descărcat.', 'success')
   } catch (e) {
     showToast('Eroare la export.')
   }
@@ -215,19 +232,21 @@ function onConfirm() { confirmModal.value.resolve(true); confirmModal.value.visi
 function onCancel() { confirmModal.value.resolve(false); confirmModal.value.visible = false }
 
 async function handleSubmit(payload) {
+  const wasEditing = !!editingItem.value
   try {
     if (editingItem.value) await subscriptionsApi.update(editingItem.value.id, payload)
     else await subscriptionsApi.create(payload)
     editingItem.value = null
     showForm.value = false
     await fetchAll()
+    showToast(wasEditing ? 'Abonament actualizat.' : 'Abonament adăugat.', 'success')
   } catch (e) { showToast('Eroare la salvare.') }
 }
 
 async function handleDelete(id) {
   const confirmed = await askConfirm('Sigur ștergi?')
   if (!confirmed) return
-  try { await subscriptionsApi.remove(id); await fetchAll() }
+  try { await subscriptionsApi.remove(id); await fetchAll(); showToast('Abonament șters.', 'success') }
   catch (e) { showToast('Eroare la ștergere.') }
 }
 
@@ -262,9 +281,14 @@ onUnmounted(() => {
       <ConfirmModal v-if="confirmModal.visible" :message="confirmModal.message" @confirm="onConfirm" @cancel="onCancel" />
 
         <!-- Toasts -->
-        <div class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm">
+        <div class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-sm">
           <TransitionGroup name="toast">
-            <div v-for="t in toasts" :key="t.id" class="bg-red-500 text-white text-sm px-4 py-3 rounded-xl shadow-lg">
+            <div
+              v-for="t in toasts"
+              :key="t.id"
+              class="text-white text-sm px-4 py-3 rounded-xl shadow-lg"
+              :class="t.type === 'success' ? 'bg-emerald-600' : 'bg-red-500'"
+            >
               {{ t.message }}
             </div>
           </TransitionGroup>
@@ -317,6 +341,9 @@ onUnmounted(() => {
                       <span class="text-lg font-bold text-gray-400">{{ targetCurrency }} / lună</span>
                     </div>
                     <p class="text-sm text-gray-400 mt-1">≈ {{ grandTotalYearly.toFixed(2) }} {{ targetCurrency }} / an</p>
+                    <p v-if="summary?.dueThisWeek" class="inline-flex items-center gap-1.5 mt-3 text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-lg">
+                      ⏰ {{ summary.dueThisWeek }} {{ summary.dueThisWeek === 1 ? 'plată' : 'plăți' }} în următoarele 7 zile
+                    </p>
                   </div>
                   <div class="w-full md:w-auto">
                     <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Valută Conversie</label>
@@ -351,7 +378,20 @@ onUnmounted(() => {
                 <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" :size="16" />
                 <input v-model="filters.search" placeholder="Caută abonamente sau categorii..." class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 ring-indigo-500/20 transition" />
               </div>
-              <div class="flex items-center gap-3 w-full md:w-auto">
+              <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
+                <div class="flex bg-gray-50 dark:bg-gray-800 rounded-xl p-1 text-xs font-bold">
+                  <button
+                    v-for="opt in statusOptions"
+                    :key="opt.value"
+                    @click="filters.status = opt.value"
+                    :class="filters.status === opt.value
+                      ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm'
+                      : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
+                    class="px-3 py-1.5 rounded-lg transition"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
                 <select v-model="filters.sortBy" class="bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-3 py-2 text-sm outline-none">
                   <option value="name">Sortează după Nume</option>
                   <option value="cost">Sortează după Preț</option>
@@ -367,18 +407,28 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div v-if="loading" class="p-12 text-center text-gray-400 animate-pulse">Se încarcă datele...</div>
+            <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
+              <div v-for="n in 6" :key="n" class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-5 animate-pulse">
+                <div class="h-4 w-2/3 bg-gray-200 dark:bg-gray-800 rounded mb-3"></div>
+                <div class="h-6 w-1/3 bg-gray-200 dark:bg-gray-800 rounded mb-4"></div>
+                <div class="h-3 w-1/2 bg-gray-200 dark:bg-gray-800 rounded mb-5"></div>
+                <div class="flex gap-2">
+                  <div class="h-8 flex-1 bg-gray-100 dark:bg-gray-800 rounded-xl"></div>
+                  <div class="h-8 flex-1 bg-gray-100 dark:bg-gray-800 rounded-xl"></div>
+                </div>
+              </div>
+            </div>
             <SubscriptionList v-else :subscriptions="subscriptions" @edit="handleEdit" @delete="handleDelete" />
 
             <!-- Pagination -->
             <div class="p-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <p class="text-xs text-gray-500">Afișare {{ subscriptions.length }} din {{ totalItems }} abonamente</p>
               <div class="flex items-center gap-2">
-                <button @click="filters.skip -= filters.take" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
+                <button @click="filters.skip = Math.max(0, filters.skip - filters.take)" :disabled="currentPage <= 1" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ChevronLeft :size="18" />
                 </button>
                 <span class="text-xs font-bold">{{ currentPage }} / {{ totalPages }}</span>
-                <button @click="filters.skip += filters.take" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30">
+                <button @click="filters.skip += filters.take" :disabled="currentPage >= totalPages" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ChevronRight :size="18" />
                 </button>
               </div>

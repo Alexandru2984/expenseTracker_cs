@@ -29,11 +29,27 @@ function formatDate(dateStr) {
     day: '2-digit', month: 'short', year: 'numeric'
   })
 }
+
+// Highlight subscriptions whose next payment is overdue or within a week.
+function dueInfo(sub) {
+  if (!sub.isActive || !sub.nextBillingDate) return null
+  const [y, m, d] = sub.nextBillingDate.split('-').map(Number)
+  const due = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((due - today) / 86400000)
+  if (days < 0) return { label: 'Restant', cls: 'bg-red-500/15 text-red-500' }
+  if (days === 0) return { label: 'Scadent azi', cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' }
+  if (days <= 7) return { label: `În ${days} ${days === 1 ? 'zi' : 'zile'}`, cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' }
+  return null
+}
 </script>
 
 <template>
-  <div v-if="subscriptions.length === 0" class="text-center text-gray-500 py-16">
-    Niciun abonament găsit. 🚀
+  <div v-if="subscriptions.length === 0" class="flex flex-col items-center justify-center text-center py-16 px-4">
+    <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl mb-3">📭</div>
+    <p class="font-bold text-gray-600 dark:text-gray-300">Niciun abonament găsit</p>
+    <p class="text-sm text-gray-400 mt-1">Adaugă primul abonament cu butonul „+ Nou" sau ajustează filtrele.</p>
   </div>
 
   <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
@@ -71,8 +87,13 @@ function formatDate(dateStr) {
       </div>
 
       <!-- Next billing -->
-      <div class="text-[11px] text-gray-400 font-medium">
-        Următoarea plată: <span class="text-gray-700 dark:text-gray-300">{{ formatDate(sub.nextBillingDate) }}</span>
+      <div class="flex items-center justify-between gap-2">
+        <div class="text-[11px] text-gray-400 font-medium">
+          Următoarea plată: <span class="text-gray-700 dark:text-gray-300">{{ formatDate(sub.nextBillingDate) }}</span>
+        </div>
+        <span v-if="dueInfo(sub)" :class="dueInfo(sub).cls" class="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 whitespace-nowrap">
+          {{ dueInfo(sub).label }}
+        </span>
       </div>
 
       <!-- Actions -->
