@@ -5,11 +5,11 @@ import SubscriptionForm from './components/SubscriptionForm.vue'
 import SubscriptionList from './components/SubscriptionList.vue'
 import LoginView from './components/LoginView.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
-import { Sun, Moon, Search, Download, BarChart3, ListFilter, ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
-import { Doughnut } from 'vue-chartjs'
+import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
+import { Doughnut, Bar } from 'vue-chartjs'
 
-ChartJS.register(ArcElement, Tooltip, Legend)
+ChartJS.register(ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const isDark = ref(localStorage.getItem('theme') !== 'light')
@@ -92,13 +92,40 @@ const chartData = computed(() => {
   }
 })
 
-const chartOptions = {
+// Computed so legend/tick colors re-render when the theme toggles.
+const tickColor = computed(() => (isDark.value ? '#9ca3af' : '#4b5563'))
+const gridColor = computed(() => (isDark.value ? '#1f2937' : '#f3f4f6'))
+
+const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { position: 'bottom', labels: { color: isDark.value ? '#9ca3af' : '#4b5563' } }
+    legend: { position: 'bottom', labels: { color: tickColor.value } }
   }
-}
+}))
+
+const barData = computed(() => {
+  const cur = summary.value?.byCurrency ?? []
+  return {
+    labels: cur.map(c => c.currency),
+    datasets: [{
+      label: 'Lunar',
+      backgroundColor: '#6366f1',
+      borderRadius: 6,
+      data: cur.map(c => c.monthlyTotal)
+    }]
+  }
+})
+
+const barOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: tickColor.value }, grid: { display: false } },
+    y: { ticks: { color: tickColor.value }, grid: { color: gridColor.value } }
+  }
+}))
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 // Session lives in httpOnly cookies; we discover it via /auth/me on load.
@@ -212,6 +239,26 @@ async function handleExport() {
     showToast('Export CSV descărcat.', 'success')
   } catch (e) {
     showToast('Eroare la export.')
+  }
+}
+
+const fileInput = ref(null)
+function triggerImport() { fileInput.value?.click() }
+
+async function handleImport(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const res = await subscriptionsApi.importCsv(fd)
+    const { imported, skipped } = res.data
+    showToast(`Import reușit: ${imported} adăugate, ${skipped} ignorate.`, 'success')
+    await fetchAll()
+  } catch (err) {
+    showToast(err.response?.data?.detail ?? 'Eroare la import CSV.')
+  } finally {
+    e.target.value = '' // allow re-selecting the same file
   }
 }
 
@@ -366,6 +413,16 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <!-- Monthly spend per currency -->
+          <div v-if="summary?.byCurrency?.length" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <BarChart3 :size="14" /> Cheltuieli lunare pe valută
+            </h3>
+            <div class="relative h-48">
+              <Bar :data="barData" :options="barOptions" />
+            </div>
+          </div>
+
           <!-- Form -->
           <Transition name="slide">
             <SubscriptionForm v-if="showForm || editingItem" :editing-item="editingItem" @submit="handleSubmit" @cancel="handleCancel" />
@@ -401,6 +458,10 @@ onUnmounted(() => {
                 <button @click="filters.sortDesc = !filters.sortDesc" class="p-2 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                   <ListFilter :size="18" :class="{ 'rotate-180': filters.sortDesc }" />
                 </button>
+                <button @click="triggerImport" class="p-2 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-indigo-500/10 text-indigo-500 transition" title="Import CSV">
+                  <Upload :size="18" />
+                </button>
+                <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="handleImport" />
                 <button @click="handleExport" class="p-2 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-emerald-500/10 text-emerald-500 transition" title="Export CSV">
                   <Download :size="18" />
                 </button>

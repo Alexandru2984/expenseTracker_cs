@@ -77,7 +77,10 @@ export const subscriptionsApi = {
   remove: (id) => api.delete(`/subscriptions/${id}`),
   getSummary: () => api.get('/subscriptions/summary'),
   getRates: () => api.get('/subscriptions/rates'),
-  exportCsv: () => api.get('/subscriptions/export', { responseType: 'blob' })
+  exportCsv: () => api.get('/subscriptions/export', { responseType: 'blob' }),
+  importCsv: (formData) => api.post('/subscriptions/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 }
 
 export default api

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using ExpenseTracker.Api.Data;
 using ExpenseTracker.Api.Dtos;
+using ExpenseTracker.Api.Infrastructure;
 using ExpenseTracker.Api.Models;
 using ExpenseTracker.Api.Services;
 
@@ -116,6 +118,102 @@ public class SubscriptionsController : ControllerBase
         // UTF-8 BOM so Excel opens accented characters correctly
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
         return File(bytes, "text/csv", $"abonamente_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv");
+    }
+
+    // POST /api/subscriptions/import — bulk import from a CSV (same shape as export)
+    [HttpPost("import")]
+    [EnableRateLimiting("writes")]
+    public async Task<IActionResult> ImportCsv(IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new ProblemDetails { Title = "Fișier lipsă.", Detail = "Încarcă un fișier CSV." });
+        if (file.Length > 1_000_000)
+            return BadRequest(new ProblemDetails { Title = "Fișier prea mare.", Detail = "Dimensiune maximă 1 MB." });
+
+        var userId = GetUserId();
+
+        string content;
+        using (var reader = new StreamReader(file.OpenReadStream()))
+            content = await reader.ReadToEndAsync();
+
+        var rows = Csv.Parse(content);
+        if (rows.Count == 0)
+            return BadRequest(new ProblemDetails { Title = "CSV gol." });
+
+        var header = rows[0].Select(h => h.Trim().ToLowerInvariant()).ToList();
+        int Col(string name) => header.IndexOf(name);
+        int iName = Col("name"), iCost = Col("cost"), iCur = Col("currency"),
+            iPeriod = Col("billingperiod"), iDate = Col("nextbillingdate"),
+            iCat = Col("category"), iActive = Col("isactive");
+
+        if (iName < 0 || iCost < 0 || iDate < 0)
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Antet CSV invalid.",
+                Detail = "Sunt necesare cel puțin coloanele Name, Cost și NextBillingDate."
+            });
+
+        var existing = (await _db.Subscriptions
+                .Where(s => s.UserId == userId)
+                .Select(s => s.Name)
+                .ToListAsync())
+            .Select(n => n.ToLowerInvariant())
+            .ToHashSet();
+
+        int imported = 0, skipped = 0;
+        var errors = new List<string>();
+        const int maxRows = 5000;
+
+        for (int r = 1; r < rows.Count && r <= maxRows; r++)
+        {
+            var row = rows[r];
+            string Get(int idx) => idx >= 0 && idx < row.Count ? row[idx].Trim() : "";
+
+            var name = Get(iName);
+            if (string.IsNullOrWhiteSpace(name)) { errors.Add($"Rândul {r + 1}: nume lipsă."); continue; }
+            if (name.Length > 100) name = name[..100];
+
+            if (existing.Contains(name.ToLowerInvariant())) { skipped++; continue; }
+
+            if (!decimal.TryParse(Get(iCost), NumberStyles.Any, CultureInfo.InvariantCulture, out var cost))
+            { errors.Add($"Rândul {r + 1}: cost invalid."); continue; }
+            cost = Math.Clamp(cost, 0m, 1_000_000m);
+
+            if (!DateOnly.TryParse(Get(iDate), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            { errors.Add($"Rândul {r + 1}: dată invalidă (folosește YYYY-MM-DD)."); continue; }
+
+            var currency = iCur >= 0 ? Get(iCur).ToUpperInvariant() : "RON";
+            if (string.IsNullOrWhiteSpace(currency)) currency = "RON";
+            if (currency.Length > 10) currency = currency[..10];
+
+            var period = BillingPeriod.Monthly;
+            if (iPeriod >= 0) Enum.TryParse(Get(iPeriod), ignoreCase: true, out period);
+
+            var category = iCat >= 0 ? Get(iCat) : "";
+            if (category.Length > 100) category = category[..100];
+
+            var isActive = true;
+            if (iActive >= 0 && bool.TryParse(Get(iActive), out var parsedActive)) isActive = parsedActive;
+
+            _db.Subscriptions.Add(new SubscriptionItem
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Cost = cost,
+                Currency = currency,
+                BillingPeriod = period,
+                NextBillingDate = date,
+                Category = category,
+                IsActive = isActive,
+                UserId = userId
+            });
+            existing.Add(name.ToLowerInvariant());
+            imported++;
+        }
+
+        if (imported > 0) await _db.SaveChangesAsync();
+
+        return Ok(new { imported, skipped, errors = errors.Take(10) });
     }
 
     // GET /api/subscriptions/{id}
