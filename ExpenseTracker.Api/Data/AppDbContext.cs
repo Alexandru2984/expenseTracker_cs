@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
+
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -73,8 +75,36 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Username)
                   .IsUnique();
 
+            entity.Property(e => e.Email)
+                  .HasMaxLength(256);
+
+            // Unique per-email; PostgreSQL treats NULLs as distinct, so legacy
+            // accounts without an email don't collide.
+            entity.HasIndex(e => e.Email)
+                  .IsUnique();
+
             entity.Property(e => e.PasswordHash)
                   .IsRequired();
+        });
+
+        modelBuilder.Entity<VerificationCode>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.CodeHash)
+                  .IsRequired()
+                  .HasMaxLength(120);
+
+            entity.Property(e => e.Purpose)
+                  .HasConversion<string>()
+                  .HasMaxLength(40);
+
+            entity.HasIndex(e => new { e.UserId, e.Purpose });
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RefreshToken>(entity =>
