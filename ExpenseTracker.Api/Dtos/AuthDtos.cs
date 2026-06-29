@@ -22,9 +22,9 @@ public class LoginDto
     public string Password { get; set; } = string.Empty;
 }
 
-public class AuthResponseDto
+// Tokens now travel in httpOnly cookies, so the body only carries
+// non-sensitive identity info the SPA needs for rendering.
+public class UserResponseDto
 {
-    public string Token { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
-    public DateTime ExpiresAt { get; set; }
 }

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { subscriptionsApi } from './api.js'
+import { subscriptionsApi, authApi } from './api.js'
 import SubscriptionForm from './components/SubscriptionForm.vue'
 import SubscriptionList from './components/SubscriptionList.vue'
 import LoginView from './components/LoginView.vue'
@@ -101,8 +101,24 @@ const chartOptions = {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-const isAuthenticated = ref(!!localStorage.getItem('jwt_token'))
-const currentUser = ref(localStorage.getItem('username') ?? '')
+// Session lives in httpOnly cookies; we discover it via /auth/me on load.
+const isAuthenticated = ref(false)
+const currentUser = ref('')
+const authReady = ref(false)
+
+async function bootstrapAuth() {
+  try {
+    const res = await authApi.me()
+    isAuthenticated.value = true
+    currentUser.value = res.data.username
+    fetchAll()
+    fetchRates()
+  } catch {
+    isAuthenticated.value = false
+  } finally {
+    authReady.value = true
+  }
+}
 
 function handleLogin(authData) {
   isAuthenticated.value = true
@@ -111,9 +127,14 @@ function handleLogin(authData) {
   fetchRates()
 }
 
-function handleLogout() {
-  localStorage.removeItem('jwt_token')
-  localStorage.removeItem('username')
+async function handleLogout() {
+  try { await authApi.logout() } catch { /* ignore */ }
+  isAuthenticated.value = false
+  currentUser.value = ''
+}
+
+// The api layer fires this when a refresh ultimately fails.
+function onAuthLogout() {
   isAuthenticated.value = false
   currentUser.value = ''
 }
@@ -219,13 +240,22 @@ function handleEdit(item) {
 function handleCancel() { editingItem.value = null; showForm.value = false }
 
 onMounted(() => {
-  if (isAuthenticated.value) { fetchAll(); fetchRates() }
+  window.addEventListener('auth:logout', onAuthLogout)
+  bootstrapAuth()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('auth:logout', onAuthLogout)
 })
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-    <LoginView v-if="!isAuthenticated" @login="handleLogin" />
+    <div v-if="!authReady" class="min-h-screen flex items-center justify-center">
+      <div class="animate-pulse text-gray-400 text-sm">Se încarcă...</div>
+    </div>
+
+    <LoginView v-else-if="!isAuthenticated" @login="handleLogin" />
 
     <template v-else>
       <!-- Confirm modal -->

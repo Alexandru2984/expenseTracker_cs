@@ -16,8 +16,8 @@ async function submit() {
     error.value = 'Completează username și parolă.'
     return
   }
-  if (isRegister.value && password.value.length < 6) {
-    error.value = 'Parola trebuie să aibă minim 6 caractere.'
+  if (isRegister.value && password.value.length < 8) {
+    error.value = 'Parola trebuie să aibă minim 8 caractere.'
     return
   }
 
@@ -28,8 +28,7 @@ async function submit() {
       username: username.value.trim(),
       password: password.value
     })
-    localStorage.setItem('jwt_token', res.data.token)
-    localStorage.setItem('username', res.data.username)
+    // Tokens are set as httpOnly cookies by the server; nothing to store here.
     emit('login', res.data)
   } catch (e) {
     const detail = e.response?.data?.detail ?? e.response?.data?.title
@@ -73,7 +72,7 @@ async function submit() {
             v-model="password"
             type="password"
             autocomplete="current-password"
-            :placeholder="isRegister ? 'Minim 6 caractere' : 'Parola ta'"
+            :placeholder="isRegister ? 'Minim 8 caractere' : 'Parola ta'"
             class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-3 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition"
           />
         </div>

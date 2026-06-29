@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -81,6 +82,7 @@ try
     builder.Services.AddHttpClient();
     builder.Services.AddMemoryCache();
     builder.Services.AddScoped<CurrencyService>();
+    builder.Services.AddSingleton<AuthTokenService>();
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
@@ -112,7 +114,24 @@ try
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = "ExpenseTracker",
                 ValidAudience = "ExpenseTracker",
-                IssuerSigningKey = jwtKey
+                IssuerSigningKey = jwtKey,
+                ClockSkew = TimeSpan.FromSeconds(30)
+            };
+
+            // Access token now lives in an httpOnly cookie, not the Authorization
+            // header. Pull it from the cookie when no bearer header is present.
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    if (string.IsNullOrEmpty(context.Token))
+                    {
+                        var cookie = context.Request.Cookies[AuthTokenService.AccessCookie];
+                        if (!string.IsNullOrEmpty(cookie))
+                            context.Token = cookie;
+                    }
+                    return Task.CompletedTask;
+                }
             };
         });
 
@@ -238,6 +257,57 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
+
+    // ── CSRF: double-submit cookie ────────────────────────────────────────────
+    // Cookies are sent automatically by the browser, so we require that unsafe
+    // /api requests echo the readable csrf cookie back in an X-CSRF-Token header
+    // (a value a cross-site attacker cannot read). A csrf cookie is (re)issued on
+    // any request that lacks one, so the SPA always has a token to send.
+    app.Use(async (ctx, next) =>
+    {
+        var cookieToken = ctx.Request.Cookies[AuthTokenService.CsrfCookie];
+        var isApi = ctx.Request.Path.StartsWithSegments("/api");
+        // /api/auth (login/register/refresh/logout) is exempt: those flows don't
+        // act on a pre-existing authenticated cookie session and are already
+        // protected by SameSite=Strict cookies + the strict 'auth' rate limiter.
+        // Exempting them also avoids the first-request bootstrap problem.
+        var isAuthPath = ctx.Request.Path.StartsWithSegments("/api/auth");
+        var method = ctx.Request.Method;
+        var isUnsafe = HttpMethods.IsPost(method) || HttpMethods.IsPut(method)
+                    || HttpMethods.IsPatch(method) || HttpMethods.IsDelete(method);
+
+        if (isApi && isUnsafe && !isAuthPath)
+        {
+            var headerToken = ctx.Request.Headers[AuthTokenService.CsrfHeader].FirstOrDefault();
+            if (string.IsNullOrEmpty(cookieToken) || string.IsNullOrEmpty(headerToken) ||
+                !CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(cookieToken), Encoding.UTF8.GetBytes(headerToken)))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                ctx.Response.ContentType = "application/problem+json";
+                await ctx.Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Status = 403,
+                    Title = "CSRF validation failed."
+                });
+                return;
+            }
+        }
+
+        if (string.IsNullOrEmpty(cookieToken))
+        {
+            ctx.Response.Cookies.Append(AuthTokenService.CsrfCookie, AuthTokenService.CreateCsrfToken(),
+                new CookieOptions
+                {
+                    HttpOnly = false, // readable so the SPA can echo it in the header
+                    Secure = ctx.Request.IsHttps,
+                    SameSite = SameSiteMode.Strict,
+                    Path = "/"
+                });
+        }
+
+        await next();
+    });
 
     app.MapHealthChecks("/health").AllowAnonymous();
     app.MapControllers();
