@@ -69,6 +69,13 @@ export const authApi = {
   me: () => api.get('/auth/me')
 }
 
+export const accountApi = {
+  get: () => api.get('/account'),
+  changePassword: (data) => api.post('/account/change-password', data),
+  changeEmail: (data) => api.post('/account/change-email', data),
+  logoutAll: () => api.post('/account/logout-all')
+}
+
 export const subscriptionsApi = {
   getAll: (params = {}) => api.get('/subscriptions', { params }),
   getById: (id) => api.get(`/subscriptions/${id}`),

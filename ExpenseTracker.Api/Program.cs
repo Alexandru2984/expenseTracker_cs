@@ -84,6 +84,7 @@ try
     builder.Services.AddScoped<CurrencyService>();
     builder.Services.AddSingleton<AuthTokenService>();
     builder.Services.AddScoped<EmailService>();
+    builder.Services.AddScoped<VerificationService>();
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>

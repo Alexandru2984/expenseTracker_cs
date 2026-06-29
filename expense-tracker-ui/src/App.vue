@@ -1,11 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { subscriptionsApi, authApi } from './api.js'
+import { subscriptionsApi, authApi, accountApi } from './api.js'
 import SubscriptionForm from './components/SubscriptionForm.vue'
 import SubscriptionList from './components/SubscriptionList.vue'
 import LoginView from './components/LoginView.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
-import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import AccountSettings from './components/AccountSettings.vue'
+import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight, Settings } from 'lucide-vue-next'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
 import { Doughnut, Bar } from 'vue-chartjs'
 
@@ -132,6 +133,13 @@ const barOptions = computed(() => ({
 const isAuthenticated = ref(false)
 const currentUser = ref('')
 const authReady = ref(false)
+const account = ref(null)
+const showSettings = ref(false)
+
+async function fetchAccount() {
+  try { account.value = (await accountApi.get()).data }
+  catch { account.value = null }
+}
 
 async function bootstrapAuth() {
   try {
@@ -140,6 +148,7 @@ async function bootstrapAuth() {
     currentUser.value = res.data.username
     fetchAll()
     fetchRates()
+    fetchAccount()
   } catch {
     isAuthenticated.value = false
   } finally {
@@ -152,18 +161,29 @@ function handleLogin(authData) {
   currentUser.value = authData.username
   fetchAll()
   fetchRates()
+  fetchAccount()
 }
 
 async function handleLogout() {
   try { await authApi.logout() } catch { /* ignore */ }
+  resetAuthState()
+}
+
+function resetAuthState() {
   isAuthenticated.value = false
   currentUser.value = ''
+  account.value = null
+  showSettings.value = false
 }
 
 // The api layer fires this when a refresh ultimately fails.
 function onAuthLogout() {
-  isAuthenticated.value = false
-  currentUser.value = ''
+  resetAuthState()
+}
+
+function onSettingsClose() {
+  showSettings.value = false
+  fetchAccount()
 }
 
 // ── Filters & Pagination ──────────────────────────────────────────────────────
@@ -327,6 +347,9 @@ onUnmounted(() => {
       <!-- Confirm modal -->
       <ConfirmModal v-if="confirmModal.visible" :message="confirmModal.message" @confirm="onConfirm" @cancel="onCancel" />
 
+      <!-- Account settings -->
+      <AccountSettings v-if="showSettings" @close="onSettingsClose" @logout="onAuthLogout" @toast="(m, t) => showToast(m, t)" />
+
         <!-- Toasts -->
         <div class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-sm">
           <TransitionGroup name="toast">
@@ -353,8 +376,11 @@ onUnmounted(() => {
                 <Sun v-if="isDark" :size="20" />
                 <Moon v-else :size="20" />
               </button>
-              <button @click="showForm = !showForm; editingItem = null" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-4 py-2 rounded-lg transition">
+              <button @click="showForm = !showForm; editingItem = null" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm px-3 sm:px-4 py-2 rounded-lg transition">
                 {{ showForm && !editingItem ? '✕ Închide' : '+ Nou' }}
+              </button>
+              <button @click="showSettings = true" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition" title="Setări cont" aria-label="Setări cont">
+                <Settings :size="20" />
               </button>
               <button @click="handleLogout" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Ieșire</button>
             </div>
@@ -363,6 +389,12 @@ onUnmounted(() => {
 
         <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
           <div v-if="error" class="bg-red-500/10 border border-red-500/30 text-red-500 rounded-xl p-4 text-sm">{{ error }}</div>
+
+          <!-- Unverified email banner -->
+          <div v-if="account && account.email && !account.emailVerified" class="bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 rounded-xl p-4 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span>⚠️ Adresa ta de email nu este verificată.</span>
+            <button @click="showSettings = true" class="text-xs font-bold underline whitespace-nowrap self-start sm:self-auto">Verifică acum</button>
+          </div>
 
           <!-- Top Section: Totals & Chart -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

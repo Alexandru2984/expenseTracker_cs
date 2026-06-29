@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,19 +16,16 @@ namespace ExpenseTracker.Api.Controllers;
 [EnableRateLimiting("auth")]
 public class AuthController : ControllerBase
 {
-    private const int CodeTtlMinutes = 15;
-    private const int MaxCodeAttempts = 5;
-
     private readonly AppDbContext _db;
     private readonly AuthTokenService _tokens;
-    private readonly EmailService _email;
+    private readonly VerificationService _verification;
     private readonly IConfiguration _config;
 
-    public AuthController(AppDbContext db, AuthTokenService tokens, EmailService email, IConfiguration config)
+    public AuthController(AppDbContext db, AuthTokenService tokens, VerificationService verification, IConfiguration config)
     {
         _db = db;
         _tokens = tokens;
-        _email = email;
+        _verification = verification;
         _config = config;
     }
 
@@ -80,7 +76,7 @@ public class AuthController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        await IssueCodeAsync(user, VerificationPurpose.EmailVerification);
+        await _verification.IssueAsync(user, VerificationPurpose.EmailVerification);
 
         return Ok(new
         {
@@ -134,7 +130,7 @@ public class AuthController : ControllerBase
 
         if (!user.EmailVerified)
         {
-            if (!await ConsumeCodeAsync(user, VerificationPurpose.EmailVerification, dto.Code))
+            if (!await _verification.ConsumeAsync(user, VerificationPurpose.EmailVerification, dto.Code))
                 return BadRequest(InvalidCode());
 
             user.EmailVerified = true;
@@ -152,7 +148,7 @@ public class AuthController : ControllerBase
         var lowered = dto.Username.Trim().ToLower();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == lowered);
         if (user is not null && !user.EmailVerified && user.Email is not null)
-            await IssueCodeAsync(user, VerificationPurpose.EmailVerification);
+            await _verification.IssueAsync(user, VerificationPurpose.EmailVerification);
 
         // Never reveal whether the account exists / is already verified.
         return Ok(new { message = "Dacă există un cont neverificat, ți-am trimis un cod nou." });
@@ -165,7 +161,7 @@ public class AuthController : ControllerBase
         var email = dto.Email.Trim().ToLowerInvariant();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user is not null && user.Email is not null)
-            await IssueCodeAsync(user, VerificationPurpose.PasswordReset);
+            await _verification.IssueAsync(user, VerificationPurpose.PasswordReset);
 
         return Ok(new { message = "Dacă există un cont cu acest email, ți-am trimis un cod de resetare." });
     }
@@ -183,7 +179,7 @@ public class AuthController : ControllerBase
 
         var email = dto.Email.Trim().ToLowerInvariant();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
-        if (user is null || !await ConsumeCodeAsync(user, VerificationPurpose.PasswordReset, dto.Code))
+        if (user is null || !await _verification.ConsumeAsync(user, VerificationPurpose.PasswordReset, dto.Code))
             return BadRequest(InvalidCode());
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
@@ -262,57 +258,6 @@ public class AuthController : ControllerBase
         Title = "Cod invalid.",
         Detail = "Codul este greșit sau a expirat. Cere unul nou."
     };
-
-    // Generates a 6-digit code, stores only its hash, invalidates older codes
-    // of the same purpose, and emails it.
-    private async Task IssueCodeAsync(User user, VerificationPurpose purpose)
-    {
-        var prior = await _db.VerificationCodes
-            .Where(c => c.UserId == user.Id && c.Purpose == purpose && c.ConsumedAt == null)
-            .ToListAsync();
-        foreach (var p in prior) p.ConsumedAt = DateTime.UtcNow;
-
-        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
-        _db.VerificationCodes.Add(new VerificationCode
-        {
-            UserId = user.Id,
-            Purpose = purpose,
-            CodeHash = AuthTokenService.Hash(code),
-            ExpiresAt = DateTime.UtcNow.AddMinutes(CodeTtlMinutes)
-        });
-        await _db.SaveChangesAsync();
-
-        if (user.Email is not null)
-            await _email.SendCodeAsync(user.Email, code, purpose);
-    }
-
-    // Validates the most recent unconsumed code; enforces expiry + attempt cap.
-    private async Task<bool> ConsumeCodeAsync(User user, VerificationPurpose purpose, string code)
-    {
-        var entry = await _db.VerificationCodes
-            .Where(c => c.UserId == user.Id && c.Purpose == purpose && c.ConsumedAt == null)
-            .OrderByDescending(c => c.CreatedAt)
-            .FirstOrDefaultAsync();
-
-        if (entry is null || DateTime.UtcNow >= entry.ExpiresAt)
-            return false;
-
-        entry.Attempts++;
-        if (entry.Attempts > MaxCodeAttempts)
-        {
-            entry.ConsumedAt = DateTime.UtcNow; // burn the code after too many tries
-            await _db.SaveChangesAsync();
-            return false;
-        }
-
-        var ok = CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(entry.CodeHash),
-            Encoding.UTF8.GetBytes(AuthTokenService.Hash(code)));
-
-        if (ok) entry.ConsumedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        return ok;
-    }
 
     // Creates+persists a rotating refresh token, writes both auth cookies.
     private async Task IssueSessionAsync(User user)
