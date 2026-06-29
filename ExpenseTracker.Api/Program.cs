@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using ExpenseTracker.Api.Data;
+using ExpenseTracker.Api.Infrastructure;
 using ExpenseTracker.Api.Services;
 
 // ── Bootstrap logger (captures startup errors before host is built) ───────────
@@ -21,14 +22,34 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    // ── Configure Forwarded Headers (for Nginx/Proxy) ─────────────────────────
+    // ── Configure Forwarded Headers (for Cloudflare → Nginx → Docker) ─────────
+    // We only trust forwarded headers coming from our reverse proxy, which lives
+    // on a private network (Docker bridge / host loopback). Trusting "everything"
+    // (the old KnownNetworks/Proxies.Clear()) let any client spoof X-Forwarded-For
+    // and bypass rate limiting / poison logs. Override the trusted ranges with
+    // ForwardedHeaders__TrustedNetworks (comma-separated CIDRs) if needed.
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        // Since we're running in Docker and Nginx is on the host, the proxy is our local network.
-        // Clearing known networks/proxies allows it to trust the X-Forwarded-For from anywhere in the Docker network.
+        options.ForwardLimit = null; // bounded by KnownNetworks/KnownProxies instead
         options.KnownNetworks.Clear();
         options.KnownProxies.Clear();
+
+        var configured = builder.Configuration["ForwardedHeaders:TrustedNetworks"];
+        var cidrs = string.IsNullOrWhiteSpace(configured)
+            ? new[] { "127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16" }
+            : configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var cidr in cidrs)
+        {
+            var parts = cidr.Split('/');
+            if (parts.Length == 2 &&
+                IPAddress.TryParse(parts[0], out var prefix) &&
+                int.TryParse(parts[1], out var len))
+            {
+                options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, len));
+            }
+        }
     });
 
     // ── Serilog ───────────────────────────────────────────────────────────────
@@ -110,36 +131,40 @@ try
         });
     });
 
-    // ── Rate limiting ─────────────────────────────────────────────────────────
+    // ── Rate limiting (keyed on the real client IP, see ClientIp) ─────────────
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
         // Global policy: 100 req/min per IP
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, IPAddress>(ctx =>
-        {
-            var ip = ctx.Connection.RemoteIpAddress ?? IPAddress.Loopback;
-            return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 100,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
-            });
-        });
+            }));
 
         // Stricter policy for writes: 20 req/min per IP
         options.AddPolicy("writes", ctx =>
-        {
-            var ip = ctx.Connection.RemoteIpAddress ?? IPAddress.Loopback;
-            return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+            RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
-            });
-        });
+            }));
+
+        // Strict policy for auth endpoints (brute-force / credential stuffing): 10 req/min per IP
+        options.AddPolicy("auth", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
     });
 
     // ── Health checks ─────────────────────────────────────────────────────────
@@ -161,6 +186,22 @@ try
 
     // ── Middleware Pipeline ───────────────────────────────────────────────────
     app.UseForwardedHeaders();
+
+    // ── Security headers (defense in depth; applies to API responses) ─────────
+    // The static SPA (served by Nginx) additionally carries a CSP <meta> tag and
+    // should get frame-ancestors/HSTS from Nginx — see deploy.md.
+    app.Use(async (ctx, next) =>
+    {
+        var headers = ctx.Response.Headers;
+        headers["X-Content-Type-Options"] = "nosniff";
+        headers["X-Frame-Options"] = "DENY";
+        headers["Referrer-Policy"] = "no-referrer";
+        headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=(), usb=()";
+        headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
+        if (ctx.Request.IsHttps)
+            headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+        await next();
+    });
 
     app.UseExceptionHandler(errApp =>
     {

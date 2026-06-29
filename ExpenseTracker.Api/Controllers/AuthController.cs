@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ExpenseTracker.Api.Data;
@@ -12,6 +13,7 @@ namespace ExpenseTracker.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("auth")]
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -27,6 +29,15 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
+        // BCrypt silently truncates at 72 bytes — reject longer passwords so users
+        // aren't surprised that only the first 72 bytes actually protect the account.
+        if (Encoding.UTF8.GetByteCount(dto.Password) > 72)
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Parolă invalidă.",
+                Detail = "Parola este prea lungă (maxim 72 de caractere)."
+            });
+
         var trimmedUsername = dto.Username.Trim();
         var loweredUsername = trimmedUsername.ToLower();
 
