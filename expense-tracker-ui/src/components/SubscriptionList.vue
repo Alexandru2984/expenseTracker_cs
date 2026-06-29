@@ -9,17 +9,17 @@ defineProps({
 const emit = defineEmits(['edit', 'delete'])
 
 const CATEGORY_COLORS = {
-  Streaming: 'bg-pink-500/20 text-pink-300',
-  Hosting: 'bg-blue-500/20 text-blue-300',
-  Infrastructure: 'bg-cyan-500/20 text-cyan-300',
-  SaaS: 'bg-violet-500/20 text-violet-300',
-  Entertainment: 'bg-orange-500/20 text-orange-300',
-  Music: 'bg-green-500/20 text-green-300',
-  Gaming: 'bg-yellow-500/20 text-yellow-300'
+  Streaming: 'bg-pink-500/15 text-pink-600 dark:text-pink-300',
+  Hosting: 'bg-blue-500/15 text-blue-600 dark:text-blue-300',
+  Infrastructure: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-300',
+  SaaS: 'bg-violet-500/15 text-violet-600 dark:text-violet-300',
+  Entertainment: 'bg-orange-500/15 text-orange-600 dark:text-orange-300',
+  Music: 'bg-green-500/15 text-green-600 dark:text-green-300',
+  Gaming: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-300'
 }
 
 function categoryColor(cat) {
-  return CATEGORY_COLORS[cat] ?? 'bg-gray-700/50 text-gray-300'
+  return CATEGORY_COLORS[cat] ?? 'bg-gray-500/15 text-gray-600 dark:text-gray-300'
 }
 
 function formatDate(dateStr) {

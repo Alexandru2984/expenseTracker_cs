@@ -372,7 +372,7 @@ onUnmounted(() => {
               <span class="font-bold">Expense Tracker</span>
             </div>
             <div class="flex items-center gap-3">
-              <button @click="toggleTheme" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+              <button @click="toggleTheme" :aria-label="isDark ? 'Comută pe tema luminoasă' : 'Comută pe tema întunecată'" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
                 <Sun v-if="isDark" :size="20" />
                 <Moon v-else :size="20" />
               </button>
@@ -517,11 +517,11 @@ onUnmounted(() => {
             <div class="p-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <p class="text-xs text-gray-500">Afișare {{ subscriptions.length }} din {{ totalItems }} abonamente</p>
               <div class="flex items-center gap-2">
-                <button @click="filters.skip = Math.max(0, filters.skip - filters.take)" :disabled="currentPage <= 1" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
+                <button @click="filters.skip = Math.max(0, filters.skip - filters.take)" :disabled="currentPage <= 1" aria-label="Pagina anterioară" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ChevronLeft :size="18" />
                 </button>
                 <span class="text-xs font-bold">{{ currentPage }} / {{ totalPages }}</span>
-                <button @click="filters.skip += filters.take" :disabled="currentPage >= totalPages" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
+                <button @click="filters.skip += filters.take" :disabled="currentPage >= totalPages" aria-label="Pagina următoare" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
                   <ChevronRight :size="18" />
                 </button>
               </div>
