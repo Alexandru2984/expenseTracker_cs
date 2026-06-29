@@ -327,3 +327,6 @@ finally
     await Log.CloseAndFlushAsync();
 }
 
+// Exposed so the integration test host (WebApplicationFactory) can reference it.
+public partial class Program { }
+

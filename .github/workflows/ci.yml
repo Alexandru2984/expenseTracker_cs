@@ -10,7 +10,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_API: ${{ github.repository }}/api
-  IMAGE_UI: ${{ github.repository }}/caddy
+  IMAGE_UI: ${{ github.repository }}/ui
 
 jobs:
   build-and-test:
@@ -82,7 +82,7 @@ jobs:
           tags: ${{ steps.meta-api.outputs.tags }}
           labels: ${{ steps.meta-api.outputs.labels }}
 
-      - name: Extract metadata (Caddy/UI)
+      - name: Extract metadata (UI)
         id: meta-ui
         uses: docker/metadata-action@v5
         with:

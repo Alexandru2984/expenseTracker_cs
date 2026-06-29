@@ -6,6 +6,18 @@ namespace ExpenseTracker.Api.Infrastructure;
 /// </summary>
 public static class Csv
 {
+    /// <summary>
+    /// Quotes a CSV field and neutralizes spreadsheet formula injection
+    /// (values starting with = + - @ or control chars are prefixed with ').
+    /// </summary>
+    public static string Field(string? value)
+    {
+        value ??= string.Empty;
+        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+            value = "'" + value;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
     public static List<List<string>> Parse(string content)
     {
         var rows = new List<List<string>>();

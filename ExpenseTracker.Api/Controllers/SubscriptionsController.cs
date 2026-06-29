@@ -105,12 +105,12 @@ public class SubscriptionsController : ControllerBase
             var cost = item.Cost.ToString(System.Globalization.CultureInfo.InvariantCulture);
             sb.AppendLine(string.Join(',',
                 item.Id,
-                CsvField(item.Name),
+                Csv.Field(item.Name),
                 cost,
-                CsvField(item.Currency),
+                Csv.Field(item.Currency),
                 item.BillingPeriod,
                 item.NextBillingDate.ToString("yyyy-MM-dd"),
-                CsvField(item.Category),
+                Csv.Field(item.Category),
                 item.IsActive,
                 item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")));
         }
@@ -315,16 +315,6 @@ public class SubscriptionsController : ControllerBase
             TotalSubscriptions = all.Count,
             DueThisWeek = dueThisWeek
         });
-    }
-
-    // Quotes a CSV field and neutralizes spreadsheet formula injection
-    // (values starting with = + - @ or control chars are prefixed with ').
-    private static string CsvField(string? value)
-    {
-        value ??= string.Empty;
-        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
-            value = "'" + value;
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     private static SubscriptionResponseDto ToDto(SubscriptionItem item) => new()
