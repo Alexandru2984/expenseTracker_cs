@@ -158,6 +158,11 @@ try
     });
 
     // ── Rate limiting (keyed on the real client IP, see ClientIp) ─────────────
+    // Limits are effectively disabled under the "Testing" environment so the
+    // integration suite doesn't trip the fixed window across tests.
+    var isTesting = builder.Environment.IsEnvironment("Testing");
+    int Permit(int normal) => isTesting ? 1_000_000 : normal;
+
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -166,7 +171,7 @@ try
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
             RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 100,
+                PermitLimit = Permit(100),
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -176,7 +181,7 @@ try
         options.AddPolicy("writes", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 20,
+                PermitLimit = Permit(20),
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -186,7 +191,7 @@ try
         options.AddPolicy("auth", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = Permit(10),
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0

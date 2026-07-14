@@ -38,7 +38,15 @@ public class TestApiFactory : WebApplicationFactory<Program>
     }
 }
 
-public class AuthFlowIntegrationTests : IClassFixture<TestApiFactory>
+// Integration tests that boot a WebApplicationFactory share a single collection
+// so they run sequentially. Two factories spinning up in parallel race on the
+// process-wide host-building hook ("entry point exited without ever building an
+// IHost"); one shared factory + serial execution avoids it.
+[CollectionDefinition("Api")]
+public class ApiCollection : ICollectionFixture<TestApiFactory> { }
+
+[Collection("Api")]
+public class AuthFlowIntegrationTests
 {
     private readonly TestApiFactory _factory;
     public AuthFlowIntegrationTests(TestApiFactory factory) => _factory = factory;
