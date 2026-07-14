@@ -7,6 +7,15 @@ on:
   pull_request:
     branches: ["main"]
 
+# Least privilege by default; the docker job opts into packages: write.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref (a new push cancels the previous CI).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_API: ${{ github.repository }}/api
@@ -16,6 +25,7 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +62,7 @@ jobs:
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: build-and-test
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
