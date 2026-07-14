@@ -86,6 +86,11 @@ try
     builder.Services.AddScoped<EmailService>();
     builder.Services.AddScoped<VerificationService>();
 
+    // Background housekeeping (skipped under the in-memory test provider, which
+    // doesn't support the bulk ExecuteDelete used by the cleanup).
+    if (!builder.Environment.IsEnvironment("Testing"))
+        builder.Services.AddHostedService<TokenCleanupService>();
+
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
         {
