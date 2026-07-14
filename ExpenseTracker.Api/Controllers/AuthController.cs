@@ -209,8 +209,23 @@ public class AuthController : ControllerBase
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TokenHash == hash);
 
-        if (stored is null || stored.RevokedAt is not null || DateTime.UtcNow >= stored.ExpiresAt)
+        if (stored is null || DateTime.UtcNow >= stored.ExpiresAt)
         {
+            _tokens.ClearAuthCookies(Response, Request.IsHttps);
+            return Unauthorized();
+        }
+
+        // Reuse detection: presenting an already-rotated (revoked) token means the
+        // token was captured and replayed. Treat it as a compromise and revoke
+        // every active session for the user, forcing a fresh login.
+        if (stored.RevokedAt is not null)
+        {
+            var family = await _db.RefreshTokens
+                .Where(t => t.UserId == stored.UserId && t.RevokedAt == null)
+                .ToListAsync();
+            foreach (var t in family) t.RevokedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
             _tokens.ClearAuthCookies(Response, Request.IsHttps);
             return Unauthorized();
         }
