@@ -26,10 +26,13 @@ public class CurrencyService
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var response = await client.GetAsync("https://open.er-api.com/v6/latest/RON");
+            // Bound the outbound call so a slow/stalled FX provider can't tie up a
+            // request thread for the default 100s HttpClient timeout.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await client.GetAsync("https://open.er-api.com/v6/latest/RON", cts.Token);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync();
+            var json = await response.Content.ReadAsStringAsync(cts.Token);
             var doc = JsonDocument.Parse(json);
             var ratesDict = new Dictionary<string, decimal>();
 
