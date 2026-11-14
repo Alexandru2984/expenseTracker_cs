@@ -108,7 +108,7 @@ Copiază `.env.example` în `.env` și completează valorile. **Nu comite niciod
 | `Jwt__RefreshTokenDays` | Durata refresh token (opțional, default 14) | `14` |
 | `Cors__AllowedOrigins` | Origini CORS permise (virgulă, gol în prod) | `http://localhost:5173` |
 | `AllowedHosts` | Host-uri permise (domeniul real în prod) | `expenses.micutu.com` |
-| `ForwardedHeaders__TrustedNetworks` | CIDR-uri proxy de încredere (opțional) | `172.16.0.0/12,127.0.0.0/8` |
+| `ForwardedHeaders__TrustedNetworks` | CIDR-uri proxy explicite; Docker necesită gateway-ul real /32 | `127.0.0.1/32,::1/128` |
 | `Auth__AllowRegistration` | Permite înregistrări noi (`true`/`false`) | `true` |
 | `Smtp__Host` / `Smtp__Port` | Server SMTP (mailcow) + port | `mail.micutu.com` / `587` |
 | `Smtp__UseStartTls` | STARTTLS (`true`) sau SSL direct (`false`) | `true` |

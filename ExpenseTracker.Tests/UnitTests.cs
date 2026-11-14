@@ -90,12 +90,13 @@ public class AuthTokenServiceTests
 public class ClientIpTests
 {
     [Fact]
-    public void Prefers_cloudflare_connecting_ip()
+    public void Ignores_unverified_cloudflare_and_forwarded_headers()
     {
         var ctx = new DefaultHttpContext();
         ctx.Request.Headers["CF-Connecting-IP"] = "1.2.3.4";
+        ctx.Request.Headers["X-Forwarded-For"] = "5.6.7.8";
         ctx.Connection.RemoteIpAddress = IPAddress.Parse("10.0.0.1");
-        Assert.Equal("1.2.3.4", ClientIp.Partition(ctx));
+        Assert.Equal("10.0.0.1", ClientIp.Partition(ctx));
     }
 
     [Fact]

@@ -24,34 +24,10 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // ── Configure Forwarded Headers (for Cloudflare → Nginx → Docker) ─────────
-    // We only trust forwarded headers coming from our reverse proxy, which lives
-    // on a private network (Docker bridge / host loopback). Trusting "everything"
-    // (the old KnownNetworks/Proxies.Clear()) let any client spoof X-Forwarded-For
-    // and bypass rate limiting / poison logs. Override the trusted ranges with
-    // ForwardedHeaders__TrustedNetworks (comma-separated CIDRs) if needed.
+    // Nginx supplies one verified client address and scheme. Trust only loopback
+    // by default; Docker deployments explicitly configure their bridge gateway.
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        options.ForwardLimit = null; // bounded by KnownNetworks/KnownProxies instead
-        options.KnownIPNetworks.Clear();
-        options.KnownProxies.Clear();
-
-        var configured = builder.Configuration["ForwardedHeaders:TrustedNetworks"];
-        var cidrs = string.IsNullOrWhiteSpace(configured)
-            ? new[] { "127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16" }
-            : configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        foreach (var cidr in cidrs)
-        {
-            var parts = cidr.Split('/');
-            if (parts.Length == 2 &&
-                IPAddress.TryParse(parts[0], out var prefix) &&
-                int.TryParse(parts[1], out var len))
-            {
-                options.KnownIPNetworks.Add(new System.Net.IPNetwork(prefix, len));
-            }
-        }
-    });
+        ProxyTrust.Configure(options, builder.Configuration["ForwardedHeaders:TrustedNetworks"]));
 
     // ── Serilog ───────────────────────────────────────────────────────────────
     builder.Host.UseSerilog((ctx, services, cfg) =>
