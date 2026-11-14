@@ -8,6 +8,7 @@ import os
 import re
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import tempfile
 import time
@@ -28,7 +29,15 @@ def main():
     old_env=envfile.read_bytes();old_nginx=nginx.read_bytes()
     (state/'app.env').write_bytes(old_env);(state/'app.env').chmod(0o600)
     (state/'nginx.conf').write_bytes(old_nginx)
-    old_image=command(['docker','inspect','--format','{{.Image}}','expensetracker_cs-api-1'],text=True).stdout.strip()
+    active=json.loads(command(['docker','inspect','expensetracker_cs-api-1','expensetracker_cs-db-1'],text=True).stdout)
+    api_env=dict(item.split('=',1) for item in active[0]['Config']['Env'] if '=' in item)
+    db_env=dict(item.split('=',1) for item in active[1]['Config']['Env'] if '=' in item)
+    lexer=shlex.shlex(api_env.get('ConnectionStrings__DefaultConnection',''),posix=True)
+    lexer.whitespace=';';lexer.whitespace_split=True;lexer.commenters=''
+    fields={key.strip().lower():value.strip() for part in lexer if '=' in part for key,value in [part.split('=',1)]}
+    if fields.get('host')!='db' or fields.get('database')!=db_env.get('POSTGRES_DB'):
+        raise RuntimeError('Live database identity does not match the backup source; review before deploying')
+    old_image=active[0]['Image']
     rollback='expensetracker_cs-api:rollback-'+stamp
     command(['docker','image','tag',old_image,rollback])
     (state/'rollback-image.txt').write_text(rollback+'\n')
