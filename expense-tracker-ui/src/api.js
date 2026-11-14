@@ -76,6 +76,12 @@ export const accountApi = {
   logoutAll: () => api.post('/account/logout-all')
 }
 
+export const financeIntegrationApi = {
+  list: () => api.get('/account/finance-tokens'),
+  create: (data) => api.post('/account/finance-tokens', data),
+  revoke: (id) => api.delete(`/account/finance-tokens/${encodeURIComponent(id)}`)
+}
+
 export const subscriptionsApi = {
   getAll: (params = {}) => api.get('/subscriptions', { params }),
   getById: (id) => api.get(`/subscriptions/${id}`),

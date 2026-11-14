@@ -21,6 +21,7 @@ public class TestApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("FinanceIntegration:Enabled", "true");
         builder.UseSetting("Jwt:Secret", "test-secret-key-at-least-32-characters-long!!");
         builder.UseSetting("ConnectionStrings:DefaultConnection",
             "Host=localhost;Database=dummy;Username=x;Password=y");
@@ -29,7 +30,8 @@ public class TestApiFactory : WebApplicationFactory<Program>
         {
             var toRemove = services
                 .Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>)
-                         || d.ServiceType == typeof(AppDbContext))
+                         || d.ServiceType == typeof(AppDbContext)
+                         || d.ServiceType == typeof(Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AppDbContext>))
                 .ToList();
             foreach (var d in toRemove) services.Remove(d);
 

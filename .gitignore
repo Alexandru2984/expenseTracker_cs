@@ -34,3 +34,8 @@ Thumbs.db
 # ── Secrets (never commit these) ─────────────────────────────────────────────
 appsettings.Production.json
 *secrets*
+
+# Local environment backups contain credentials too.
+.env.*
+!.env.example
+.artifacts/

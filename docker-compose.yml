@@ -47,7 +47,6 @@ services:
       target: bundle
     env_file: .env
     entrypoint: ["/efbundle"]
-    command: ["--connection", "${ConnectionStrings__DefaultConnection}"]
     depends_on:
       db:
         condition: service_healthy

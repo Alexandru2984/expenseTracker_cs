@@ -33,7 +33,7 @@ try
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         options.ForwardLimit = null; // bounded by KnownNetworks/KnownProxies instead
-        options.KnownNetworks.Clear();
+        options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
 
         var configured = builder.Configuration["ForwardedHeaders:TrustedNetworks"];
@@ -48,7 +48,7 @@ try
                 IPAddress.TryParse(parts[0], out var prefix) &&
                 int.TryParse(parts[1], out var len))
             {
-                options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, len));
+                options.KnownIPNetworks.Add(new System.Net.IPNetwork(prefix, len));
             }
         }
     });
@@ -224,6 +224,11 @@ try
     app.Use(async (ctx, next) =>
     {
         var headers = ctx.Response.Headers;
+        if (ctx.Request.Path.StartsWithSegments("/api"))
+        {
+            headers.CacheControl = "no-store";
+            headers["X-Robots-Tag"] = "noindex, nofollow";
+        }
         headers["X-Content-Type-Options"] = "nosniff";
         headers["X-Frame-Options"] = "DENY";
         headers["Referrer-Policy"] = "no-referrer";

@@ -1,7 +1,7 @@
 # Expense Tracker
 
 Aplicație full-stack pentru urmărirea abonamentelor și cheltuielilor recurente.
-Backend ASP.NET Core 8 + EF Core + PostgreSQL. Frontend Vue 3 + Vite + Tailwind CSS.
+Backend ASP.NET Core 10 + EF Core 10 + PostgreSQL. Frontend Vue 3 + Vite + Tailwind CSS.
 Deployabil cu `docker compose` pe orice VPS Linux cu Docker, folosind Nginx ca reverse proxy.
 
 ---
@@ -35,9 +35,9 @@ Funcționalități principale:
 
 ### Cerințe
 
-- .NET 8 SDK
+- .NET 10 SDK
 - PostgreSQL 16 (local sau Docker)
-- Node.js 20+
+- Node.js 24+
 
 ### Backend
 
@@ -180,8 +180,8 @@ token-urilor, rezolvarea IP-ului real, izolarea pe utilizator (ownership) și fl
 
 | Layer | Tehnologie |
 |---|---|
-| Backend | ASP.NET Core 8 Web API |
-| ORM | Entity Framework Core 8 |
+| Backend | ASP.NET Core 10 Web API |
+| ORM | Entity Framework Core 10 |
 | Baza de date | PostgreSQL 16 |
 | Email | MailKit (SMTP / mailcow) |
 | Frontend | Vue 3 + Vite + Tailwind CSS, instalabil ca PWA |
@@ -192,3 +192,9 @@ token-urilor, rezolvarea IP-ului real, izolarea pe utilizator (ownership) și fl
 ## Licență
 
 [MIT](LICENSE)
+
+## Conectare cu Finance F#
+
+Setări cont include tokenuri personale read-only pentru prognoze și alerte în Finance.
+Vezi [contractul și instrucțiunile](docs/FINANCE-INTEGRATION.md). Activare explicită prin
+`FinanceIntegration__Enabled=true`; nu se conectează automat conturile existente.

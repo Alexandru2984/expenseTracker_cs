@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import FinanceIntegrationPanel from './FinanceIntegrationPanel.vue'
 import { accountApi, authApi } from '../api.js'
 import { X, ShieldCheck, ShieldAlert, LogOut } from 'lucide-vue-next'
 
@@ -144,6 +145,8 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
               {{ emailBusy ? 'Se procesează...' : (awaitingCode ? 'Confirmă codul' : 'Trimite codul') }}
             </button>
           </form>
+
+          <FinanceIntegrationPanel @toast="(...args) => emit('toast', ...args)" />
 
           <!-- Logout everywhere -->
           <div class="pt-2 border-t border-gray-100 dark:border-gray-800">

@@ -1,5 +1,5 @@
 # ── Stage 1: Restore & publish ────────────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
 COPY ExpenseTracker.Api.csproj ./
@@ -9,25 +9,25 @@ COPY . ./
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 # ── Stage 2: Build EF migration bundle (self-contained, Alpine/musl) ─────────
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS bundle
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS bundle
 WORKDIR /src
 
 COPY ExpenseTracker.Api.csproj ./
 RUN dotnet restore
 
-RUN dotnet tool install --global dotnet-ef --version 8.0.11
+RUN dotnet tool install --global dotnet-ef --version 10.0.15
 ENV PATH="$PATH:/root/.dotnet/tools"
 
 COPY . ./
 RUN dotnet ef migrations bundle \
-    --self-contained -r linux-x64 \
+    --self-contained -r linux-musl-x64 \
     -o /efbundle
 
 # ── Stage 3: Runtime (Alpine, non-root) ───────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -g 101 -S appgroup && adduser -u 100 -S appuser -G appgroup
 USER appuser
 
 COPY --from=build --chown=appuser:appgroup /app/publish .
