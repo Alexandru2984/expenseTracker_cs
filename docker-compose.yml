@@ -46,7 +46,7 @@ services:
       context: ./ExpenseTracker.Api
       target: bundle
     env_file: .env
-    entrypoint: ["/efbundle"]
+    entrypoint: ["/app/efbundle"]
     depends_on:
       db:
         condition: service_healthy

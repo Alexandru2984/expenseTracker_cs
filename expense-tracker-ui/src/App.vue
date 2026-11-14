@@ -366,7 +366,7 @@ onUnmounted(() => {
 
         <!-- Header -->
         <header class="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur sticky top-0 z-10">
-          <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap gap-3 items-center justify-between">
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold text-white">$</div>
               <span class="font-bold">Expense Tracker</span>

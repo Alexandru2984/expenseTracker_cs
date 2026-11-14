@@ -39,3 +39,5 @@ appsettings.Production.json
 .env.*
 !.env.example
 .artifacts/
+
+__pycache__/

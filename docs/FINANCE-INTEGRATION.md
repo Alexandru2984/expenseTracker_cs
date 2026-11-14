@@ -30,3 +30,18 @@ F# își protejează copia tokenului prin DataProtection. Deconectarea în F# ș
 Runtime-ul API și dependențele Microsoft au fost actualizate la .NET 10 LTS. Bundle-ul EF
 folosește linux-musl-x64 pentru runtime-ul Alpine, cu factory de tooling care nu necesită
 secrete la build. Conexiunea de migrare este citită din environment, nu din argumente CLI.
+
+## Lansare și rollback
+
+`sudo python3 scripts/deploy-finance-integration.py --image IMAGINE_API` activează numai API-ul
+și frontendul deja construit. Înainte de orice schimbare face un dump consistent al bazei
+active și îl restaurează integral într-un container PostgreSQL separat fără rețea; copiile
+și configurația de rollback sunt private în `/var/backups/expense-tracker`.
+Frontendul este copiat root-owned în `/opt/expense-tracker/releases/`, iar nginx este verificat
+înainte de reload și prin răspunsul efectiv. API-ul vechi este păstrat ca imagine de rollback.
+Un eșec restabilește imaginea/configurația, fără restaurarea automată a datelor clientului.
+Nu rulează migrații pe baza de producție pentru această integrare (schema rămâne aceeași).
+
+Verificare: 35 teste backend, 24 verificări UI/WCAG pe desktop/390/320 px, build Vite 8 și
+auditurile NuGet/npm fără advisories cunoscute în sursele consultate. CI include testul
+panoului pe API sintetic, separat de testele de autentificare reale cu WebApplicationFactory.
