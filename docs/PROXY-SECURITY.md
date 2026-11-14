@@ -28,3 +28,13 @@ explicit, antete multiple/asimetrice și configurații invalide. Antetele brute 
 partiția de limitare. Nicio probă brute-force nu este rulată pe conturi reale.
 
 [Documentația Microsoft pentru proxy-uri](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/proxy-load-balancer?view=aspnetcore-10.0).
+
+## Verificarea lansării
+
+Imagine activă: `expensetracker_cs-api:proxy-hardening-fa6f897`, cu gateway-ul real
+`172.22.0.1/32` configurat explicit. `ops/nginx-expenses.conf` înregistrează vhostul
+aplicat. Backupul PostgreSQL anterior lansării a fost restaurat integral într-un
+container fără rețea. Proba C# → F# cu noua imagine, PostgreSQL și CA/TLS temporare
+a trecut: token, sync, prognoze, alerte preț, revocare și izolare între utilizatori.
+După activare: container healthy, zero restarturi; health public 200 și export anonim
+401/no-store. DB nu a fost repornită și nu s-au rulat migrații în producție.
