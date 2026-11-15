@@ -20,9 +20,47 @@ def command(args,**kwargs):
     return subprocess.run(args,check=True,**({"stdout":subprocess.PIPE,"stderr":subprocess.PIPE}|kwargs))
 
 
+def with_security_headers(config):
+    """Embed reviewed app-specific policies; shared host snippets stay unchanged."""
+    spa=(ROOT/'ops/security-headers-spa.conf').read_text().strip()
+    api=(ROOT/'ops/security-headers-api.conf').read_text().strip()
+    start='# expense-security-spa-start';end='# expense-security-spa-end'
+    managed=start+'\n    '+spa.replace('\n','\n    ')+'\n    '+end
+    if 'include snippets/security-headers.conf;' in config:
+        config=config.replace('include snippets/security-headers.conf;',managed,1)
+    elif start in config and end in config:
+        config=re.sub(re.escape(start)+r'.*?'+re.escape(end),lambda _:managed,config,count=1,flags=re.S)
+    else:raise RuntimeError('Expected security headers configuration was not found')
+    names=re.findall(r'add_header\s+([\w-]+)',api)
+    for route in ('/api/','/health'):
+        pattern=r'(location\s+'+re.escape(route)+r'\s*\{)([^{}]*)(\})'
+        def replace(match):
+            body=re.sub(r'\s*# expense-security-api-start.*?# expense-security-api-end','',match[2],flags=re.S)
+            policy='\n        # expense-security-api-start\n'
+            policy+=''.join('        proxy_hide_header '+name+';\n' for name in names)
+            policy+='        '+api.replace('\n','\n        ')+'\n        # expense-security-api-end\n    '
+            return match[1]+body+policy+match[3]
+        config,count=re.subn(pattern,replace,config,count=1)
+        if count!=1:raise RuntimeError('Expected proxy location was not found: '+route)
+    return config
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--image',required=True);args=parser.parse_args()
     if os.geteuid()!=0:raise SystemExit('Run with sudo')
+    git=['git','-c','safe.directory='+str(ROOT)]
+    if command(git+['status','--porcelain'],cwd=ROOT,text=True).stdout.strip():
+        raise SystemExit('Commit the reviewed source and build before deploying; working tree is dirty')
+    full_revision=command(git+['rev-parse','HEAD'],cwd=ROOT,text=True).stdout.strip()
+    candidate=json.loads(command(['docker','image','inspect',args.image],text=True).stdout)[0]
+    if (candidate['Config'].get('Labels') or {}).get('org.opencontainers.image.revision')!=full_revision:
+        raise SystemExit('Image revision must match HEAD; build with --build-arg VCS_REF=<full commit>')
+    candidate_id=candidate['Id']
+    frontend=ROOT/'expense-tracker-ui/dist'
+    if not (frontend/'index.html').is_file() or not (frontend/'build-revision.txt').is_file():
+        raise SystemExit('Build the UI from the committed source before deploying')
+    if (frontend/'build-revision.txt').read_text().strip()!=full_revision:
+        raise SystemExit('Frontend build revision must match HEAD; rebuild the UI after committing')
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     state=Path('/var/backups/expense-tracker')/('deploy-'+stamp);state.mkdir(parents=True,mode=0o700);os.chmod(state.parent,0o700)
     envfile=ROOT/'.env';nginx=Path('/etc/nginx/sites-available/expenses.micutu.com')
@@ -65,8 +103,6 @@ def main():
         json.loads(counts)
         print('Verified PostgreSQL backup restored in isolation; table counts:',counts)
     finally:subprocess.run(['docker','rm','-f',probe],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    frontend=ROOT/'expense-tracker-ui/dist'
-    if not (frontend/'index.html').is_file():raise RuntimeError('Build the UI first')
     if any(path.is_symlink() for path in frontend.rglob('*')):raise RuntimeError('Symlinks are not allowed in public artifacts')
     revision=command(['git','-c','safe.directory='+str(ROOT),'rev-parse','--short','HEAD'],cwd=ROOT,text=True).stdout.strip()
     release=Path('/opt/expense-tracker/releases')/(stamp+'-'+revision)
@@ -85,7 +121,7 @@ def main():
     try:
         lines=[line for line in old_env.decode().splitlines() if not line.startswith('FinanceIntegration__Enabled=')]
         envfile.write_text('\n'.join(lines)+'\nFinanceIntegration__Enabled=true\n');envfile.chmod(0o600)
-        activate_image(args.image)
+        activate_image(candidate_id)
         config=old_nginx.decode()
         blocks=list(re.finditer(r'location\s+/\s*\{([^{}]*)\}',config))
         static=next((block for block in blocks if re.search(r'\broot\s+[^;]+;',block[1])),None)
@@ -93,6 +129,15 @@ def main():
         body=re.sub(r'\broot\s+[^;]+;', 'root '+str(release/'public')+';',static[1],count=1)
         if not re.search(r'\bexpires\s+',body):body='\n        expires -1;'+body
         config=config[:static.start(1)]+body+config[static.end(1):]
+        # Keep app-specific crawl rules on the same immutable release. The host
+        # shared snippet points at another domain's sitemap and stays unchanged.
+        robots='location = /robots.txt {\n        root '+str(release/'public')+';\n        default_type text/plain;\n        expires -1;\n        try_files $uri =404;\n    }'
+        if re.search(r'location\s*=\s*/robots\.txt\s*\{[^{}]*\}',config):
+            config=re.sub(r'location\s*=\s*/robots\.txt\s*\{[^{}]*\}',robots,config,count=1)
+        elif 'include snippets/robots.conf;' in config:
+            config=config.replace('include snippets/robots.conf;',robots,1)
+        else:raise RuntimeError('Expected app robots location or shared snippet was not found')
+        config=with_security_headers(config)
         nginx.write_text(config)
         command(['nginx','-t']);command(['systemctl','reload','nginx'])
         # Check the actual origin vhost, not a successful reload signal alone.
@@ -101,8 +146,16 @@ def main():
             if response.stdout==(release/'public/index.html').read_bytes():break
             time.sleep(.2)
         else:raise RuntimeError('New immutable UI did not become active')
+        for public_file in ('robots.txt','sitemap.xml'):
+            response=command(['curl','--fail','--silent','--show-error','--max-time','5','--resolve','expenses.micutu.com:443:127.0.0.1','https://expenses.micutu.com/'+public_file])
+            if response.stdout!=(release/'public'/public_file).read_bytes():
+                raise RuntimeError('Public crawl metadata did not become active: '+public_file)
         status=command(['curl','--silent','--show-error','--max-time','5','-o','/dev/null','-w','%{http_code}','--resolve','expenses.micutu.com:443:127.0.0.1','https://expenses.micutu.com/api/integrations/finance/subscriptions'],text=True).stdout
         if status!='401':raise RuntimeError('Scoped export did not reject an anonymous request')
+        headers=command(['curl','--silent','--show-error','--max-time','5','-D','-','-o','/dev/null','--resolve','expenses.micutu.com:443:127.0.0.1','https://expenses.micutu.com/api/integrations/finance/subscriptions'],text=True).stdout
+        for name,value in {'x-frame-options':'DENY','referrer-policy':'no-referrer','cache-control':'no-store','x-robots-tag':'noindex, nofollow'}.items():
+            values=[line.split(':',1)[1].strip() for line in headers.splitlines() if line.lower().startswith(name+':')]
+            if values!=[value]:raise RuntimeError('Expected one authoritative security header: '+name)
         print('C# API and immutable UI activated:',revision,'; backup and rollback metadata:',state)
     except BaseException:
         envfile.write_bytes(old_env);nginx.write_bytes(old_nginx)

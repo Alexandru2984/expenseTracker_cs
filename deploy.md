@@ -1,5 +1,31 @@
 # Deploy Guide — Expense Tracker
 
+## Fluxul verificat pentru acest VPS
+
+După commitul etapei verificate, construiește ambele artefacte din același HEAD:
+
+```bash
+EXPENSE_REVISION=$(git rev-parse HEAD)
+docker build --build-arg VCS_REF="$EXPENSE_REVISION" \
+  -t "expensetracker_cs-api:release-$EXPENSE_REVISION" ./ExpenseTracker.Api
+npm --prefix expense-tracker-ui ci --ignore-scripts
+npm --prefix expense-tracker-ui run build
+sudo python3 scripts/deploy-finance-integration.py \
+  --image "expensetracker_cs-api:release-$EXPENSE_REVISION"
+```
+
+Scriptul refuză surse necomise sau artefacte cu alt commit, verifică backupul prin
+restaurare izolată și lansează numai API/UI, fără migrație ori restart PostgreSQL.
+Politicile din `ops/security-headers-*.conf` sunt copiate în vhostul aplicației;
+snippet-urile shared ale altor site-uri rămân neschimbate. Include verificarea
+health, export anonim, headere și robots/sitemap, cu rollback la eșec.
+
+SDK-ul acestui proiect este .NET 10. Pe hostul actual există separat la
+`/home/micu/.local/share/finance-dotnet/dotnet`; executabilul implicit al hostului
+este încă .NET 8 pentru alte aplicații. Build-ul Docker folosește propriul SDK 10.
+
+Secțiunile următoare descriu și instalarea generică Docker Compose.
+
 Ghid pentru deployment pe un VPS Linux cu Docker și Nginx (host).
 
 ## Cerințe preliminare

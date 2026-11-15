@@ -26,6 +26,18 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: expense_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d expense_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -38,12 +50,14 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore ExpenseTracker.sln
+        run: dotnet restore ExpenseTracker.sln -p:NuGetAuditMode=all -warnaserror:NU1901,NU1902,NU1903,NU1904
 
       - name: Build
         run: dotnet build ExpenseTracker.sln --no-restore -c Release
 
       - name: Test
+        env:
+          EXPENSE_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=expense_test;Username=postgres;Password=isolated-ci-password
         run: dotnet test ExpenseTracker.sln --no-build -c Release --verbosity normal
 
       - name: Setup Node 24
@@ -73,6 +87,10 @@ jobs:
         working-directory: expense-tracker-ui
         run: npm run test:finance
 
+      - name: Dashboard, light/dark, mobile, sessions and accessibility
+        working-directory: expense-tracker-ui
+        run: npm run test:dashboard
+
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
@@ -89,7 +107,7 @@ jobs:
           persist-credentials: false
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -97,28 +115,30 @@ jobs:
 
       - name: Extract metadata (API)
         id: meta-api
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_API }}
 
       - name: Build & push API image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: ./ExpenseTracker.Api
           push: true
           tags: ${{ steps.meta-api.outputs.tags }}
           labels: ${{ steps.meta-api.outputs.labels }}
+          build-args: VCS_REF=${{ github.sha }}
 
       - name: Extract metadata (UI)
         id: meta-ui
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_UI }}
 
       - name: Build & push UI image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: ./expense-tracker-ui
           push: true
           tags: ${{ steps.meta-ui.outputs.tags }}
           labels: ${{ steps.meta-ui.outputs.labels }}
+          build-args: VCS_REF=${{ github.sha }}

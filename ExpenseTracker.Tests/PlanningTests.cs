@@ -15,6 +15,14 @@ namespace ExpenseTracker.Tests;
 public class ForecastTests
 {
     [Fact]
+    public void Current_model_matches_snapshot_without_a_schema_migration()
+    {
+        using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=design_only;Username=test;Password=test").Options);
+        Assert.False(db.Database.HasPendingModelChanges());
+    }
+
+    [Fact]
     public void Monthly_forecast_preserves_anchor_day_across_short_months()
     {
         var item = new SubscriptionItem { NextBillingDate = new(2027, 1, 31) };

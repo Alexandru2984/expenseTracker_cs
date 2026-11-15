@@ -1,13 +1,28 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { execFileSync } from 'node:child_process'
+
+function buildRevisionPlugin() {
+  return {
+    name: 'record-build-revision',
+    generateBundle() {
+      let revision = process.env.BUILD_REVISION
+      if (!revision) {
+        try { revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() }
+        catch { revision = 'unknown' }
+      }
+      this.emitFile({ type: 'asset', fileName: 'build-revision.txt', source: `${revision}\n` })
+    }
+  }
+}
 
 // Inject a strict Content-Security-Policy meta tag into the PRODUCTION build
 // only (dev keeps it off so Vite HMR / websockets keep working).
 function cspPlugin() {
   const csp = [
     "default-src 'self'",
-    "script-src 'self' https://analytics.micutu.com",
-    "connect-src 'self' https://analytics.micutu.com",
+    "script-src 'self' https://analytics.micutu.com https://static.cloudflareinsights.com",
+    "connect-src 'self' https://analytics.micutu.com https://cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
@@ -29,7 +44,7 @@ function cspPlugin() {
 }
 
 export default defineConfig({
-  plugins: [vue(), cspPlugin()],
+  plugins: [vue(), cspPlugin(), buildRevisionPlugin()],
   server: {
     port: 5173,
     proxy: {

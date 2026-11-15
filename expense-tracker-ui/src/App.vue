@@ -21,6 +21,9 @@ function toggleTheme() {
 }
 
 const isAuthenticated = ref(false), currentUser = ref(''), authReady = ref(false)
+watch(isAuthenticated, value => {
+  document.querySelector('meta[name="robots"]')?.setAttribute('content', value ? 'noindex,nofollow' : 'index,follow')
+}, { immediate: true })
 const account = ref(null), showSettings = ref(false)
 const subscriptions = ref([]), summary = ref(null), insights = ref(null), totalItems = ref(0)
 const loading = ref(false), error = ref(null), saving = ref(false), importBusy = ref(false)
@@ -286,7 +289,7 @@ onUnmounted(() => {
                 <Sun v-if="isDark" :size="20" />
                 <Moon v-else :size="20" />
               </button>
-              <button @click="handleNew" :disabled="saving" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm px-3 sm:px-4 py-2 rounded-lg transition">
+              <button @click="handleNew" :disabled="saving" class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm px-3 sm:px-4 py-2 rounded-lg transition">
                 {{ showForm && !editingItem ? '✕ Închide' : '+ Nou' }}
               </button>
               <button @click="showSettings = true" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition" title="Setări cont" aria-label="Setări cont">

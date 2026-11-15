@@ -1,5 +1,13 @@
 # Integrare Finance F#
 
+Actualizare 15.11.2026: contractul rămâne `schemaVersion: 1`, cu aceleași câmpuri și
+frecvențe Monthly/Yearly. Suspendarea/reactivarea apare în `isActive`; prognoza din
+C# nu modifică scadența și nu creează plăți în F#. Sesiunile JWT sunt acum legate
+de rândul revocabil, iar parolele/codurile beneficiază de controalele din
+[auditul curent](AUDIT-AND-ROADMAP.md). Suitele de verificare separă contractul API,
+ownership/revocarea și interfața browser; nu echivalează cu un test complet al
+tuturor funcțiilor aplicației F#.
+
 C# este sursa abonamentelor planificate. F# consumă un snapshot pentru prognoze și alerte,
 fără să creeze cheltuieli și fără să modifice abonamentele în C#.
 

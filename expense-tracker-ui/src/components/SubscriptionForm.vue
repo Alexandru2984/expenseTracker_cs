@@ -157,7 +157,7 @@ function handleSubmit() {
       <div class="sm:col-span-2 flex gap-4 pt-2">
         <button
           type="submit"
-          class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
+          class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
         >
           {{ busy ? 'Se salvează…' : editingItem ? 'Salvează modificările' : 'Adaugă abonament' }}
         </button>

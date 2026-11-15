@@ -25,6 +25,8 @@ RUN dotnet ef migrations bundle \
 
 # ── Stage 3: Runtime (Alpine, non-root) ───────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.revision=$VCS_REF
 WORKDIR /app
 
 RUN addgroup -g 101 -S appgroup && adduser -u 100 -S appuser -G appgroup

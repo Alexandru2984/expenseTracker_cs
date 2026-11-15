@@ -71,6 +71,8 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    });
    await page.goto(`http://127.0.0.1:${server.address().port}`);
    await page.getByRole('heading', { name: 'Planifică din timp' }).waitFor();
+   assert.equal(await page.locator('link[rel=canonical]').getAttribute('href'), 'https://expenses.micutu.com/'); checks++;
+   assert.equal(await page.locator('meta[name=robots]').getAttribute('content'), 'noindex,nofollow'); checks++;
    await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
    const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Overflow at ${width}/${theme}`);
    await noOverflow(); checks++;
@@ -113,6 +115,17 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    assert.deepEqual(settingsAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), [], `Settings axe at ${width}/${theme}`); checks++;
    await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Setări cont'); checks++;
+   await page.getByRole('button', { name: 'Ieșire', exact: true }).click();
+   await page.getByRole('heading', { name: 'Expense Tracker', exact: true }).waitFor();
+   assert.equal(await page.getByRole('heading', { name: 'Alpha service', exact: true }).count(), 0); checks++;
+   assert.equal(await page.locator('meta[name=robots]').getAttribute('content'), 'index,follow'); checks++;
+   const loginAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+   assert.deepEqual(loginAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), [], `Login axe at ${width}/${theme}`); checks++;
+   await page.getByRole('button', { name: 'Prima dată? Creează un cont', exact: true }).click();
+   await page.getByLabel('Email', { exact: true }).waitFor();
+   const registerAudit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+   assert.deepEqual(registerAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), [], `Register axe at ${width}/${theme}`); checks++;
+
    assert.deepEqual(errors, []); checks++;
    await context.close();
   }

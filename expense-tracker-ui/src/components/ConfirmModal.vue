@@ -35,7 +35,7 @@ useDialog(dialog, () => emit('cancel'))
           </button>
           <button
             @click="emit('confirm')"
-            class="flex-1 bg-red-600 hover:bg-red-500 text-white font-medium py-2 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+            class="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           >
             {{ confirmLabel }}
           </button>

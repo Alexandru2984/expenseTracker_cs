@@ -30,12 +30,14 @@ const titles = {
 const subtitle = computed(() => titles[mode.value])
 
 function go(next) {
+  if (loading.value) return
   error.value = ''
   info.value = ''
   mode.value = next
 }
 
 async function submit() {
+  if (loading.value) return
   error.value = ''
   info.value = ''
   loading.value = true
@@ -107,6 +109,7 @@ async function doVerify() {
 }
 
 async function resend() {
+  if (loading.value) return
   error.value = ''
   info.value = ''
   loading.value = true
@@ -175,25 +178,25 @@ const submitLabel = computed(() => {
 
       <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">{{ subtitle }}</p>
 
-      <div v-if="error" class="bg-red-500/10 border border-red-500/30 text-red-500 rounded-xl p-3 text-xs mb-4 font-medium">
+      <div v-if="error" role="alert" class="bg-red-500/10 border border-red-500/30 text-red-500 rounded-xl p-3 text-xs mb-4 font-medium">
         {{ error }}
       </div>
-      <div v-if="info" class="bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-300 rounded-xl p-3 text-xs mb-4 font-medium">
+      <div v-if="info" role="status" class="bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-300 rounded-xl p-3 text-xs mb-4 font-medium">
         {{ info }}
       </div>
 
       <form @submit.prevent="submit" class="space-y-4">
         <!-- Username (login / register) -->
         <div v-if="mode === 'login' || mode === 'register'">
-          <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Username</label>
-          <input v-model="username" type="text" autocomplete="username" placeholder="Nume utilizator"
+          <label for="login-username" class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Username</label>
+          <input id="login-username" :disabled="loading" required v-model="username" maxlength="50" type="text" autocomplete="username" placeholder="Nume utilizator"
             class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-3 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition" />
         </div>
 
         <!-- Email (register / forgot) -->
         <div v-if="mode === 'register' || mode === 'forgot'">
-          <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Email</label>
-          <input v-model="email" type="email" autocomplete="email" placeholder="adresa@email.com"
+          <label for="login-email" class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Email</label>
+          <input id="login-email" :disabled="loading" required v-model="email" maxlength="256" type="email" autocomplete="email" placeholder="adresa@email.com"
             class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-3 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition" />
         </div>
 
@@ -207,28 +210,28 @@ const submitLabel = computed(() => {
 
         <!-- Code (verify / reset) -->
         <div v-if="mode === 'verify' || mode === 'reset'">
-          <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Cod (6 cifre)</label>
-          <input v-model="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••"
+          <label for="login-code" class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Cod (6 cifre)</label>
+          <input id="login-code" :disabled="loading" required v-model="code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="••••••"
             class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-3 text-center text-lg tracking-[0.5em] dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition" />
         </div>
 
         <!-- Password (login / register) -->
         <div v-if="mode === 'login' || mode === 'register'">
-          <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Parolă</label>
-          <input v-model="password" type="password" :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
+          <label for="login-password" class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Parolă</label>
+          <input id="login-password" :disabled="loading" required v-model="password" maxlength="128" type="password" :autocomplete="mode === 'register' ? 'new-password' : 'current-password'"
             :placeholder="mode === 'register' ? 'Minim 8 caractere' : 'Parola ta'"
             class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-3 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition" />
         </div>
 
         <!-- New password (reset) -->
         <div v-if="mode === 'reset'">
-          <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Parolă nouă</label>
-          <input v-model="newPassword" type="password" autocomplete="new-password" placeholder="Minim 8 caractere"
+          <label for="login-new-password" class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Parolă nouă</label>
+          <input id="login-new-password" :disabled="loading" required v-model="newPassword" minlength="8" maxlength="100" type="password" autocomplete="new-password" placeholder="Minim 8 caractere"
             class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-3 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition" />
         </div>
 
         <button type="submit" :disabled="loading"
-          class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]">
+          class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]">
           {{ submitLabel }}
         </button>
       </form>
@@ -236,7 +239,7 @@ const submitLabel = computed(() => {
       <!-- Contextual links -->
       <div class="mt-6 text-center space-y-2">
         <template v-if="mode === 'login'">
-          <button @click="go('register')" class="block w-full text-xs font-bold text-indigo-500 hover:text-indigo-400 transition uppercase tracking-wider">
+          <button @click="go('register')" class="block w-full text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition uppercase tracking-wider">
             Prima dată? Creează un cont
           </button>
           <button @click="go('forgot')" class="block w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
@@ -245,13 +248,13 @@ const submitLabel = computed(() => {
         </template>
 
         <template v-else-if="mode === 'register'">
-          <button @click="go('login')" class="text-xs font-bold text-indigo-500 hover:text-indigo-400 transition uppercase tracking-wider">
+          <button @click="go('login')" class="text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition uppercase tracking-wider">
             Ai deja cont? Conectează-te
           </button>
         </template>
 
         <template v-else-if="mode === 'verify'">
-          <button @click="resend" :disabled="loading" class="block w-full text-xs font-bold text-indigo-500 hover:text-indigo-400 transition uppercase tracking-wider disabled:opacity-50">
+          <button @click="resend" :disabled="loading" class="block w-full text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition uppercase tracking-wider disabled:opacity-50">
             Retrimite codul
           </button>
           <button @click="go('login')" class="block w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">

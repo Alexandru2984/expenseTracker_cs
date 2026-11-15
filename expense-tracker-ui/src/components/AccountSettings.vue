@@ -137,7 +137,7 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
             <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Schimbă parola</p>
             <input v-model="currentPassword" type="password" autocomplete="current-password" aria-label="Parola curentă pentru schimbarea parolei" required placeholder="Parola curentă" :class="inputCls" />
             <input v-model="newPassword" type="password" autocomplete="new-password" aria-label="Parola nouă" required minlength="8" maxlength="100" placeholder="Parolă nouă (min 8)" :class="inputCls" />
-            <button type="submit" :disabled="pwBusy" class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition active:scale-[0.98]">
+            <button type="submit" :disabled="pwBusy" class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition active:scale-[0.98]">
               {{ pwBusy ? 'Se salvează...' : 'Schimbă parola' }}
             </button>
           </form>

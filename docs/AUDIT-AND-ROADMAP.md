@@ -155,7 +155,31 @@ Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).
 - Index unic pentru username normalizat, pentru a elimina și cursa între
   înregistrări cu diferențe de majuscule; schimbarea necesită migrație controlată.
 - MFA/passkeys, audit de acces cu retenție explicită și recuperare cont.
-- Alinierea headerelor nginx/API duplicate; CSP/frame-ancestors blochează deja
-  încadrarea, dar X-Frame-Options și Referrer-Policy au valori duplicate diferite.
 - Backup off-site criptat și probă periodică de restaurare, verificarea alertelor
   SMTP, quotas și SLO; probele din această rundă nu înlocuiesc operarea continuă.
+
+## Etapa finală: CI, SEO și lansare verificabilă
+
+- 93 teste backend pe PostgreSQL temporar, inclusiv concurență și verificarea că
+  modelul EF corespunde snapshotului fără migrație de schemă. 157 verificări browser
+  la 1440/390/320 px, light/dark, inclusiv formulare login/înregistrare și WCAG;
+  suplimentar 24 verificări ale conectorului Finance. npm/NuGet fără advisories în
+  sursele disponibile la verificare. Aceste rezultate sunt locale; workflow-ul
+  GitHub a fost actualizat, nu executat pe GitHub în această sesiune.
+- CI folosește PostgreSQL separat, audit NuGet tranzitiv cu advisories tratate ca
+  erori, audit npm și ambele suite browser. Acțiunile sunt fixate la SHA complet.
+  Build-ul Docker UI folosește npm ci; containerul de distribuție trece de la
+  Alpine 3.19 la o ramură 3.24 suportată, conform
+  [calendarului Alpine](https://alpinelinux.org/releases/). Nu s-a efectuat o scanare
+  exhaustivă CVE a tuturor imaginilor sau serviciilor hostului.
+- Canonical/social metadata, sitemap numai pentru pagina publică și robots pentru
+  domeniul corect. Dashboardul autentificat setează noindex; API rămâne no-store și
+  noindex. Regulile shared ale altor domenii nu sunt modificate.
+- Politici nginx distincte pentru SPA/API, fără headere contradictorii și fără
+  unsafe-inline în script-src. Politica din meta este aliniată cu domeniile de
+  analytics existente. Verificare idempotentă și nginx -t înainte de lansare;
+  verificări HTTP în procedura de deploy și rollback automat la eșec.
+- API și UI înregistrează commitul sursă. Deploy-ul respinge surse necomise,
+  imagini sau frontend construite din alt commit; API-ul este activat prin ID-ul
+  imuabil al imaginii. Configurația și datele vechi sunt păstrate privat pentru
+  rollback. Dovezile activării în producție se înregistrează după lansare.
