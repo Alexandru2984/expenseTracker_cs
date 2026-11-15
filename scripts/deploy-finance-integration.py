@@ -17,6 +17,37 @@ import time
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def compose_pin(image):
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}',image):raise ValueError('Expected an immutable local image ID')
+    return {'x-expense-tracker-managed':True,'services':{'api':{'image':image}}}
+
+
+def read_compose_pin(root):
+    path=root/'docker-compose.override.yml'
+    for name in ('docker-compose.override.yaml','compose.override.yml','compose.override.yaml'):
+        if (root/name).exists():raise RuntimeError('Another local Compose override exists; merge it deliberately before deployment')
+    if path.is_symlink():raise RuntimeError('Managed Compose override must not be a symlink')
+    if not path.exists():return None
+    raw=path.read_bytes()
+    try:
+        doc=json.loads(raw)
+        if doc!=compose_pin(doc['services']['api']['image']):raise ValueError('Unmanaged fields')
+    except (ValueError,KeyError,TypeError):
+        raise RuntimeError('Refusing to replace an unmanaged Compose override') from None
+    return raw
+
+
+def write_compose_pin(root,image):
+    path=root/'docker-compose.override.yml'
+    with tempfile.NamedTemporaryFile(dir=root,prefix='.expense-compose-',delete=False) as tmp:
+        temporary=Path(tmp.name)
+        try:
+            tmp.write((json.dumps(compose_pin(image),indent=2)+'\n').encode());tmp.flush();os.fsync(tmp.fileno())
+            os.fchmod(tmp.fileno(),0o644)
+            os.replace(temporary,path)
+        finally:temporary.unlink(missing_ok=True)
+
+
 def command(args,**kwargs):
     return subprocess.run(args,check=True,**({"stdout":subprocess.PIPE,"stderr":subprocess.PIPE}|kwargs))
 
@@ -106,6 +137,8 @@ def main():
     state=Path('/var/backups/expense-tracker')/('deploy-'+stamp);state.mkdir(parents=True,mode=0o700);os.chmod(state.parent,0o700)
     envfile=ROOT/'.env';nginx=Path('/etc/nginx/sites-available/expenses.micutu.com')
     old_env=envfile.read_bytes();old_nginx=nginx.read_bytes()
+    old_pin=read_compose_pin(ROOT)
+    if old_pin is not None:(state/'compose-override-before.json').write_bytes(old_pin)
     (state/'app.env').write_bytes(old_env);(state/'app.env').chmod(0o600)
     (state/'nginx.conf').write_bytes(old_nginx)
     active=json.loads(command(['docker','inspect','expensetracker_cs-api-1','expensetracker_cs-db-1'],text=True).stdout)
@@ -180,7 +213,17 @@ def main():
         else:raise RuntimeError('New API did not become healthy')
     api_changed=False
     nginx_changed=False
+    pin_changed=False
     try:
+        current=json.loads(command(['docker','inspect','expensetracker_cs-api-1','expensetracker_cs-db-1'],text=True).stdout)
+        if [item['Id'] for item in current]!=[item['Id'] for item in active]:
+            raise RuntimeError('Live containers changed during the restore drill; retry with a fresh backup')
+        if migration_history('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB'])!=before:
+            raise RuntimeError('Live migration history changed during the restore drill')
+        if envfile.read_bytes()!=old_env or nginx.read_bytes()!=old_nginx or read_compose_pin(ROOT)!=old_pin:
+            raise RuntimeError('Live configuration changed during the restore drill')
+        if command(git+['rev-parse','HEAD'],cwd=ROOT,text=True).stdout.strip()!=full_revision or command(git+['status','--porcelain'],cwd=ROOT,text=True).stdout.strip():
+            raise RuntimeError('Reviewed source changed during the restore drill')
         if pending:
             networks=set(active[0]['NetworkSettings']['Networks']) & set(active[1]['NetworkSettings']['Networks'])
             if len(networks)!=1:raise RuntimeError('Expected exactly one shared API/database network')
@@ -239,9 +282,19 @@ def main():
         for name,value in {'x-frame-options':'DENY','referrer-policy':'no-referrer','cache-control':'no-store','x-robots-tag':'noindex, nofollow'}.items():
             values=[line.split(':',1)[1].strip() for line in headers.splitlines() if line.lower().startswith(name+':')]
             if values!=[value]:raise RuntimeError('Expected one authoritative security header: '+name)
-        print('C# API and immutable UI activated:',revision,'; backup and rollback metadata:',state)
+        # Default `docker compose up` must resolve the reviewed image too. Keep
+        # the pin out of .env so it cannot change the database container's env.
+        if read_compose_pin(ROOT)!=old_pin:raise RuntimeError('Compose override changed during activation')
+        pin_changed=True
+        write_compose_pin(ROOT,candidate_id)
+        (state/'compose-pin-after.json').write_text(json.dumps(compose_pin(candidate_id)))
+        print('C# API and immutable UI activated:',revision,'; persistent Compose image pin set; backup and rollback metadata:',state)
     except BaseException:
         envfile.write_bytes(old_env)
+        if pin_changed:
+            pin=ROOT/'docker-compose.override.yml'
+            if old_pin is None:pin.unlink(missing_ok=True)
+            else:pin.write_bytes(old_pin)
         if nginx_changed:nginx.write_bytes(old_nginx)
         if api_changed:activate_image(rollback)
         if nginx_changed:command(['nginx','-t']);command(['systemctl','reload','nginx'])

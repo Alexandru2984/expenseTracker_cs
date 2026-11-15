@@ -361,3 +361,20 @@ CSV/calendar și clientul API verifică acum contextul local; un 401 vechi nu re
 o mutație după schimbarea sesiunii. Matricea finală include trei probe suplimentare
 pentru aceste cazuri. Coordonarea completă login/logout/cookie-uri între taburi
 rămâne prioritate de securitate, alături de MFA și alertare.
+
+## Persistența release-ului în Docker Compose
+
+La reluarea lucrului s-a observat API healthy din tagul implicit
+`expensetracker_cs-api`, fără etichetă de revizie; containerele API și DB fuseseră
+recreate la 15.11.2026 19:56 UTC, iar UI-ul public rămânea la `ca3d806`.
+Nu s-a atribuit această recreare sesiunii de lucru și nu s-a presupus ce cod
+conține imaginea neidentificată. Istoricul bazei avea încă 10 migrații.
+
+Cauza operațională remediată: override-ul de imagine era folosit numai în comanda
+de activare, fără un pin persistent pentru următorul `docker compose up` obișnuit.
+Deploymentul publică acum atomic override-ul implicit cu image ID, fără variabile
+noi în `.env` și fără schimbarea modelului DB. Nu suprascrie override-uri personale.
+Reverifică starea/sursa după restore drill și restaurează pin-ul la rollback.
+Patru teste locale, inclusiv încărcarea reală a configurației Compose fără `-f`,
+verifică pin-ul, configurația DB identică și refuzul referințelor mutabile,
+override-urilor străine și symlink-urilor.

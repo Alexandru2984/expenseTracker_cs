@@ -30,6 +30,20 @@ un prefix al migrațiilor din commit; downgrade-ul automat este refuzat.
 Un lock privat permite o singură lansare a aplicației la un moment dat. Bundle-ul
 rulează cu filesystem read-only și extrage fișierele necesare într-un tmpfs privat.
 
+La succes, scriptul scrie atomic `docker-compose.override.yml` cu ID-ul imuabil al
+imaginii API. Fișierul este gestionat de deployment și exclus din Git; un
+`docker compose up` obișnuit folosește astfel aceeași imagine. Pin-ul nu intră în
+`.env`, pentru a nu modifica configurația containerului PostgreSQL. Un override
+personal sau un symlink este refuzat înainte de modificarea producției; scriptul
+nu îl suprascrie. Starea anterioară este păstrată în backup și restaurată la eșec.
+Comenzile cu `-f` explicit pot ocoli încărcarea implicită; pentru producție se
+folosește fluxul verificat, fără rebuild direct peste tagul implicit.
+
+Imediat înainte de migrare/activare se verifică din nou containerele, istoricul
+migrațiilor, configurația și sursa. O schimbare concurentă oprește lansarea, pentru
+a reface backupul din noua stare. Verificările locale ale pin-ului sunt:
+`python3 -m unittest discover -s scripts/tests -v`.
+
 Rollbackul aplicației păstrează coloanele aditive; nu rulează Down și nu
 restaurează automat date peste modificările utilizatorilor. Folosește acest flux
 doar pentru migrații compatibile cu versiunea veche, după revizuirea DDL-ului.

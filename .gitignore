@@ -46,3 +46,6 @@ __pycache__/
 /backups/
 *.sql.gz
 *.dump
+
+# Generated production image pin; backed up/restored by the deployment script.
+/docker-compose.override.yml
