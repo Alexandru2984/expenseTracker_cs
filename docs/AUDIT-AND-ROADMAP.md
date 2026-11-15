@@ -183,3 +183,14 @@ Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).
   imagini sau frontend construite din alt commit; API-ul este activat prin ID-ul
   imuabil al imaginii. Configurația și datele vechi sunt păstrate privat pentru
   rollback. Dovezile activării în producție se înregistrează după lansare.
+
+## Compatibilitate Cloudflare verificată în browser
+
+Verificarea publică a primei lansări complete a identificat JavaScript Detections
+injectat de Cloudflare și blocat de CSP, plus frame-ancestors ignorat într-un meta
+tag. CSP este acum emis exclusiv în HTTP de nginx, cu nonce aleator per cerere
+(`$request_id`); Cloudflare poate aplica nonce-ul scripturilor sale. HTML folosește
+no-store, iar asseturile cu nume hashuit au cache immutable separat. Politica API
+rămâne default-src none. Nu se adaugă unsafe-inline în script-src și nu se schimbă
+regulile Bot Fight Mode ale zonei. Referință:
+[Cloudflare JavaScript Detections și CSP](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/).

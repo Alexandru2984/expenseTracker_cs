@@ -127,8 +127,17 @@ def main():
         static=next((block for block in blocks if re.search(r'\broot\s+[^;]+;',block[1])),None)
         if static is None:raise RuntimeError('Static UI location was not found')
         body=re.sub(r'\broot\s+[^;]+;', 'root '+str(release/'public')+';',static[1],count=1)
-        if not re.search(r'\bexpires\s+',body):body='\n        expires -1;'+body
+        # HTML with a request-specific CSP nonce must not be revalidated against
+        # a cached response carrying another request's nonce.
+        body=re.sub(r'\bexpires\s+[^;]+;','',body)
         config=config[:static.start(1)]+body+config[static.end(1):]
+        asset_headers='\n'.join(line for line in (ROOT/'ops/security-headers-spa.conf').read_text().splitlines()
+            if not line.startswith('add_header Cache-Control'))
+        assets='location /assets/ {\n        root '+str(release/'public')+';\n        try_files $uri =404;\n        '+asset_headers.replace('\n','\n        ')+'\n        add_header Cache-Control "public, max-age=31536000, immutable" always;\n    }'
+        if re.search(r'location\s+/assets/\s*\{[^{}]*\}',config):
+            config=re.sub(r'location\s+/assets/\s*\{[^{}]*\}',lambda _:assets,config,count=1)
+        else:
+            config=config.replace('location / {',assets+'\n\n    location / {',1)
         # Keep app-specific crawl rules on the same immutable release. The host
         # shared snippet points at another domain's sitemap and stays unchanged.
         robots='location = /robots.txt {\n        root '+str(release/'public')+';\n        default_type text/plain;\n        expires -1;\n        try_files $uri =404;\n    }'

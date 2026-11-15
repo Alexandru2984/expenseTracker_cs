@@ -16,35 +16,10 @@ function buildRevisionPlugin() {
   }
 }
 
-// Inject a strict Content-Security-Policy meta tag into the PRODUCTION build
-// only (dev keeps it off so Vite HMR / websockets keep working).
-function cspPlugin() {
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self' https://analytics.micutu.com https://static.cloudflareinsights.com",
-    "connect-src 'self' https://analytics.micutu.com https://cloudflareinsights.com",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
-    "font-src 'self'",
-    "manifest-src 'self'",
-    "worker-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "form-action 'self'",
-    "frame-ancestors 'none'"
-  ].join('; ')
-
-  return {
-    name: 'inject-csp',
-    transformIndexHtml(html, ctx) {
-      if (ctx.server) return html // skip in dev
-      return html.replace('</title>', `</title>\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`)
-    }
-  }
-}
-
+// Production CSP is delivered by nginx. Cloudflare reads its per-response
+// nonce from that HTTP header when adding JavaScript Detections.
 export default defineConfig({
-  plugins: [vue(), cspPlugin(), buildRevisionPlugin()],
+  plugins: [vue(), buildRevisionPlugin()],
   server: {
     port: 5173,
     proxy: {
