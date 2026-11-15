@@ -23,7 +23,7 @@ def command(args,**kwargs):
 
 def migration_history(container,user,database):
     sql='SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY "MigrationId"'
-    return command(['docker','exec',container,'psql','-h','127.0.0.1','-U',user,'-d',database,'-At','-c',sql],text=True).stdout.splitlines()
+    return command(['docker','exec',container,'psql','-h','/var/run/postgresql','-U',user,'-d',database,'-At','-c',sql],text=True).stdout.splitlines()
 
 
 def migrate_image(image,network,envfile=None):
