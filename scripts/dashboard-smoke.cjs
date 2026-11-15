@@ -70,6 +70,8 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     else if (url.pathname === '/api/account/finance-tokens') data = { available: true, tokens: [] };
     else if (url.pathname === '/api/subscriptions/rates/status') data = { rates: { RON: 1, EUR: .2, USD: .22 }, source: 'live', fetchedAt: new Date().toISOString() };
     else if (url.pathname === '/api/subscriptions/summary') data = { byCurrency, activeSubscriptions: active.length, totalSubscriptions: items.length, dueThisWeek: active.length };
+    else if (url.pathname === '/api/subscriptions/duplicates') data = { checkedCount: items.length, includeInactive: url.searchParams.get('includeInactive') === 'true', groups: [{ name: 'Alpha service', currency: 'EUR', activeMonthlyTotal: 20, items: [items[1], { ...items[1], id: 'duplicate-alpha', cost: 120, billingPeriod: 'Yearly' }] }] };
+    else if (/^\/api\/subscriptions\/[0-9a-f-]{36}$/.test(url.pathname) && request.method() === 'GET') data = items.find(s => s.id === url.pathname.split('/').at(-1));
     else if (/^\/api\/subscriptions\/[^/]+\/price-history$/.test(url.pathname)) {
      const id = url.pathname.split('/').at(-2), sub = items.find(s => s.id === id);
      const skip = Number(url.searchParams.get('skip') ?? 0), take = Number(url.searchParams.get('take') ?? 20);
@@ -113,6 +115,14 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
    const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Overflow at ${width}/${theme}`);
    await noOverflow(); checks++;
+   await page.getByRole('button', { name: 'Arată 1 grup posibil duplicat', exact: true }).click();
+   await page.getByRole('button', { name: 'Revizuiește Alpha service 120,00 EUR', exact: true }).waitFor(); checks++;
+   const includePausedRequest = page.waitForRequest(r => new URL(r.url()).pathname === '/api/subscriptions/duplicates' && new URL(r.url()).searchParams.get('includeInactive') === 'true');
+   await page.getByLabel('Include și abonamentele suspendate', { exact: true }).check(); await includePausedRequest; checks++;
+   await page.getByRole('button', { name: 'Revizuiește Alpha service 10,00 EUR', exact: true }).click();
+   assert.equal(await page.getByLabel('Nume', { exact: true }).inputValue(), 'Alpha service'); checks++;
+   await page.getByRole('button', { name: 'Anulează', exact: true }).click();
+   await page.getByRole('button', { name: 'Ascunde 1 grup posibil duplicat', exact: true }).click();
    const historyButton = page.getByRole('button', { name: 'Istoric preț Alpha service', exact: true });
    await historyButton.click();
    const priceDialog = page.getByRole('dialog', { name: 'Istoric preț', exact: true });

@@ -34,6 +34,7 @@ Funcționalități principale:
 - Schimbare email cu confirmare înainte de înlocuirea adresei și cooldown pe cont
 - Backoff persistent la login și username unic indiferent de majuscule
 - Istoric al prețurilor, variații lunare, paginare și protecție la formulare vechi
+- Detectarea posibilelor duplicate pe întregul cont, cu revizuire manuală
 - Grafice pe întregul cont și sursa cursului valutar afișată explicit
 
 ---

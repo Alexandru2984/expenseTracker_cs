@@ -306,6 +306,17 @@ public class SubscriptionsController : ControllerBase
         return Ok(SubscriptionInsights.Build(items, DateOnly.FromDateTime(DateTime.UtcNow)));
     }
 
+    [HttpGet("duplicates")]
+    public async Task<IActionResult> GetDuplicates([FromQuery] bool includeInactive = false, CancellationToken ct = default)
+    {
+        var userId = GetUserId();
+        var items = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId && (includeInactive || s.IsActive))
+            .OrderBy(s => s.Id).Take(5001)
+            .Select(s => new DuplicateCandidate(s.Id, s.Name, s.Cost, s.Currency, s.BillingPeriod, s.NextBillingDate, s.Category, s.IsActive)).ToListAsync(ct);
+        if (items.Count > 5000) return StatusCode(413, new ProblemDetails { Title = "Verificarea acceptă maximum 5000 de abonamente." });
+        return Ok(DuplicateSubscriptions.Build(items, includeInactive));
+    }
+
     [HttpGet("calendar")]
     public async Task<IActionResult> ExportCalendar(CancellationToken ct)
     {

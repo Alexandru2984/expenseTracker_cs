@@ -115,6 +115,7 @@ export const subscriptionsApi = {
   getRates: () => api.get('/subscriptions/rates'),
   getRatesStatus: () => api.get('/subscriptions/rates/status'),
   getInsights: () => api.get('/subscriptions/insights'),
+  duplicates: (params = {}, signal) => api.get('/subscriptions/duplicates', { params, signal }),
   setStatus: (id, isActive) => api.post(`/subscriptions/${encodeURIComponent(id)}/status`, { isActive }),
   exportCalendar: () => api.get('/subscriptions/calendar', { responseType: 'blob' }),
   exportCsv: () => api.get('/subscriptions/export', { responseType: 'blob' }),

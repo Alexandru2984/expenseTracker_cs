@@ -8,6 +8,7 @@ import ConfirmModal from './components/ConfirmModal.vue'
 import AccountSettings from './components/AccountSettings.vue'
 import PlanningPanel from './components/PlanningPanel.vue'
 import BudgetPanel from './components/BudgetPanel.vue'
+import DuplicatePanel from './components/DuplicatePanel.vue'
 import PriceHistoryDialog from './components/PriceHistoryDialog.vue'
 import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight, Settings } from 'lucide-vue-next'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
@@ -32,6 +33,7 @@ const loading = ref(false), error = ref(null), saving = ref(false), importBusy =
 const exportingCsv = ref(false), exportingCalendar = ref(false), logoutBusy = ref(false)
 const editingItem = ref(null), initialItem = ref(null), showForm = ref(false), importReport = ref(null)
 const historyItem = ref(null)
+const reviewing = ref(false)
 const pendingIds = ref(new Set())
 const filters = ref({ search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 })
 const currentPage = computed(() => Math.floor(filters.value.skip / filters.value.take) + 1)
@@ -134,6 +136,7 @@ function resetAuthState() {
   subscriptions.value = []; summary.value = null; insights.value = null; totalItems.value = 0
   editingItem.value = null; initialItem.value = null; showForm.value = false; importReport.value = null
   historyItem.value = null
+  reviewing.value = false
   error.value = null; loading.value = false; toasts.value = []
   if (confirmModal.value.visible) onCancel()
   filters.value = { search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 }
@@ -244,6 +247,16 @@ async function revealForm() {
   document.getElementById('subscription-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 function handleEdit(item) { initialItem.value = null; editingItem.value = item; revealForm() }
+async function handleReview(id) {
+  if (reviewing.value) return
+  reviewing.value = true
+  const epoch = authEpoch
+  try {
+    const response = await subscriptionsApi.getById(id)
+    if (epoch === authEpoch && isAuthenticated.value) handleEdit(response.data)
+  } catch (error) { if (epoch === authEpoch) showToast(errorMessage(error, 'Abonamentul nu a putut fi deschis. Reîncearcă.')) }
+  finally { if (epoch === authEpoch) reviewing.value = false }
+}
 function handleDuplicate(item) { editingItem.value = null; initialItem.value = { ...item, name: `${item.name.slice(0, 90)} (copie)` }; revealForm() }
 function handleCancel() { editingItem.value = null; initialItem.value = null; showForm.value = false }
 function handleNew() { if (showForm.value && !editingItem.value) handleCancel(); else { editingItem.value = null; initialItem.value = null; revealForm() } }
@@ -392,6 +405,7 @@ onUnmounted(() => {
 
           <PlanningPanel :data="insights" :exporting="exportingCalendar" @calendar="handleCalendar" />
           <BudgetPanel :refresh-key="summary" :categories="insights?.byCategory ?? []" @toast="(m, t) => showToast(m, t)" />
+          <DuplicatePanel :refresh-key="summary" :reviewing="reviewing" @review="handleReview" />
 
           <div v-if="importReport" role="status" class="panel p-4 space-y-2 text-sm">
             <div class="flex justify-between gap-3"><h2 class="font-bold">Rezultatul importului</h2><button type="button" @click="importReport = null" class="text-xs underline">Închide raportul</button></div>
