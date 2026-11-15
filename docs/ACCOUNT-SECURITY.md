@@ -55,8 +55,8 @@ Migrația adaugă numai `Users.PendingEmail`, `Users.VerificationEmailSentAt` ș
 versiunea veche a API-ului poate citi schema extinsă. Nu se șterg sau rescriu date.
 DDL are lock_timeout 5s și statement_timeout 30s în tranzacția migrației.
 
-107 teste backend au trecut pe PostgreSQL temporar, inclusiv concurență între
-contexte, cooldown comun și confirmări concurente ale aceleiași adrese. 211
+115 teste backend au trecut pe PostgreSQL temporar, inclusiv concurență între
+contexte, cooldown comun și confirmări concurente ale aceleiași adrese. 259
 verificări browser au trecut la 1440/390/320 px în light/dark, inclusiv persistența
 cererii după redeschiderea setărilor, countdown, anulare, eroare și confirmare.
 Datele din probe sunt sintetice; nicio verificare nu trimite emailuri de test către
@@ -67,3 +67,10 @@ restaurat, repetă bundle-ul, exercită citirea utilizatorilor cu API-ul vechi �
 nou și verifică păstrarea numărului de utilizatori/abonamente. Un eșec în această
 probă oprește lucrul înainte de schimbarea bazei active. Testele PostgreSQL pornesc
 schema prin migrațiile reale, nu prin EnsureCreated.
+
+Lansat în producție pe 15.11.2026, revizia `270ec04`. Backupul privat și probele
+de restaurare sunt în `/var/backups/expense-tracker/deploy-20261115T174304Z`.
+Istoricul a trecut de la 6 la 8 migrații, cu idempotentă și compatibilitate vechi/nou
+verificate pe restaurare. PostgreSQL nu a fost restartat. Verificarea publică este
+anonimă; scenariile autentificate au folosit conturi sintetice în mediile de test,
+fără crearea unor conturi sau trimiterea unor emailuri de test în producție.

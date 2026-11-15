@@ -196,7 +196,7 @@ rămâne default-src none. Nu se adaugă unsafe-inline în script-src și nu se 
 regulile Bot Fight Mode ale zonei. Referință:
 [Cloudflare JavaScript Detections și CSP](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/).
 
-## Lansare finală verificată
+## Lansare precedentă verificată
 
 Cod activ: `9b6e954`, imagine
 `expensetracker_cs-api:release-9b6e95490effbc4e1030cf49bfe0e1b3f6d8836b`.
@@ -235,4 +235,36 @@ calculele și protecția la editări concurente sunt în [BUDGETS.md](BUDGETS.md
 259 verificări browser trec la 1440/390/320 px în light/dark, inclusiv bugete,
 persistență după reload, conflicte de editare, confirmare/anulare email și WCAG.
 Lansarea aplică migrațiile numai după verificarea pe backupul restaurat și probe
-de compatibilitate cu imaginile API veche și nouă. Activarea se înregistrează separat.
+de compatibilitate cu imaginile API veche și nouă.
+
+## Lansare conturi și bugete verificată
+
+Cod activ: `270ec04ed2b89cd2a6a87267a3e39f3423f4d626`, imagine
+`expensetracker_cs-api:release-270ec04ed2b89cd2a6a87267a3e39f3423f4d626`.
+Backup și rollback private:
+`/var/backups/expense-tracker/deploy-20261115T174304Z`.
+
+Backupul a fost restaurat în izolare. Bundle-ul candidat a aplicat cele două
+migrații aditive și a rulat încă o dată fără schimbări. API-ul vechi și cel nou au
+citit schema extinsă; numărul de conturi și abonamente a rămas identic (0/0).
+Istoricul bazei active confirmă toate cele 8 migrații. Serviciul PostgreSQL nu a
+fost restartat; API-ul nou este healthy, cu zero restarturi.
+`ops/nginx-expenses.conf` reflectă configurația activă și release-ul UI imuabil.
+
+Verificările publice confirmă health 200 și cont/bugete/export Finance anonime
+401, toate cu no-store și un singur X-Frame-Options: DENY. Revizia publicată de UI
+corespunde imaginii API. Chromium la 390 px nu raportează overflow, erori JavaScript
+sau CSP. Proba F# cu .NET HttpClient ajunge la verificarea autorizării exportului
+Finance (401 fără token); contractul rămâne schemaVersion 1. Nu s-au creat conturi
+și nu s-au trimis emailuri de test în producție.
+
+Problema de propagare CDN de la lansarea precedentă este rezolvată: cererea publică
+fără query la robots.txt include acum regulile aplicației și sitemap-ul domeniului
+corect, alături de conținutul gestionat de Cloudflare. Nu s-a efectuat un purge și
+nu s-au modificat regulile Bot Fight Mode.
+
+Validare înainte de lansare: 115 teste backend pe PostgreSQL inițializat prin
+migrații, fără skip; 259 verificări dashboard la 1440/390/320 px în light/dark;
+24 verificări UI Finance. Acestea acoperă scenariile implementate, nu certifică
+absența tuturor vulnerabilităților. CI de pe GitHub rămâne de executat după
+publicarea commiturilor; nu s-a făcut push.
