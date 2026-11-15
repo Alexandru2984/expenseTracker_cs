@@ -20,11 +20,12 @@ class ComposePinTests(unittest.TestCase):
             root = Path(directory)
             (root / 'docker-compose.yml').write_bytes((ROOT / 'docker-compose.yml').read_bytes())
             (root / '.env').write_text('POSTGRES_USER=synthetic\nPOSTGRES_PASSWORD=synthetic-test-password\nPOSTGRES_DB=synthetic\n')
-            env = {k: v for k, v in os.environ.items() if not k.startswith('COMPOSE_')}
+            env = {k: v for k, v in os.environ.items() if not k.startswith(('COMPOSE_', 'POSTGRES_')) and k != 'ASPNETCORE_ENVIRONMENT'}
             def config():
                 result = subprocess.run(['docker', 'compose', '--project-name', 'expense-pin-test', '--project-directory', str(root), 'config', '--format', 'json'], env=env, check=True, capture_output=True, text=True)
                 return json.loads(result.stdout)
             before = config()
+            self.assertEqual('synthetic-test-password', before['services']['db']['environment']['POSTGRES_PASSWORD'])
             deployment.write_compose_pin(root, self.image)
             after = config()
             self.assertEqual(self.image, after['services']['api']['image'])
