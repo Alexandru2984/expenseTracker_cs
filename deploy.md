@@ -178,8 +178,11 @@ server {
 }
 ```
 
-> CSP-ul SPA-ului e livrat printr-un `<meta http-equiv="Content-Security-Policy">`
-> injectat la build (vezi `vite.config.js`), deci nu trebuie configurat în Nginx.
+> CSP-ul SPA-ului este emis exclusiv prin headere HTTP în Nginx, cu nonce per
+> răspuns pentru compatibilitatea cu scripturile injectate de Cloudflare. Aplică
+> politicile distincte din `ops/security-headers-spa.conf` și
+> `ops/security-headers-api.conf` prin fluxul verificat de la începutul ghidului.
+> Nu adăuga o politică meta sau unsafe-inline în script-src.
 
 Activează site-ul și instalează SSL:
 
