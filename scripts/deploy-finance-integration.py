@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Deploy only the API and immutable UI; preserve PostgreSQL, back up first, roll back on failure."""
 import argparse
+import fcntl
 from datetime import datetime, timezone
 import gzip
 import json
@@ -27,7 +28,8 @@ def migration_history(container,user,database):
 
 def migrate_image(image,network,envfile=None):
     args=['docker','run','--rm','--network',network,'--memory','256m','--pids-limit','128',
-        '--read-only','--tmpfs','/tmp:rw,nosuid,nodev,mode=1777,size=64m']
+        '--read-only','--tmpfs','/tmp:rw,nosuid,nodev,mode=1777,size=64m',
+        '-e','DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp/efbundle']
     if envfile is not None:args+=['--env-file',str(envfile)]
     else:args+=['-e','ConnectionStrings__DefaultConnection=Host=127.0.0.1;Database=postgres;Username=postgres']
     command(args+['--entrypoint','/app/efbundle',image])
@@ -83,6 +85,10 @@ def main():
     parser.add_argument('--migrate',action='store_true',help='Apply reviewed forward migrations, after an isolated restore and compatibility drill')
     args=parser.parse_args()
     if os.geteuid()!=0:raise SystemExit('Run with sudo')
+    lockdir=Path('/var/backups/expense-tracker');lockdir.mkdir(parents=True,exist_ok=True,mode=0o700)
+    lock=lockdir.joinpath('.deploy.lock').open('a');os.fchmod(lock.fileno(),0o600)
+    try:fcntl.flock(lock.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:raise SystemExit('Another Expense Tracker deployment is already running')
     git=['git','-c','safe.directory='+str(ROOT)]
     if command(git+['status','--porcelain'],cwd=ROOT,text=True).stdout.strip():
         raise SystemExit('Commit the reviewed source and build before deploying; working tree is dirty')

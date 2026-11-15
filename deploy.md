@@ -27,6 +27,8 @@ două ori pentru a verifica idempotenta și verifică citirea schemei cu imagini
 API veche și nouă. Abia apoi aplică migrarea forward pe baza activă, înainte de
 schimbarea API-ului. PostgreSQL nu se repornește. Istoricul din DB trebuie să fie
 un prefix al migrațiilor din commit; downgrade-ul automat este refuzat.
+Un lock privat permite o singură lansare a aplicației la un moment dat. Bundle-ul
+rulează cu filesystem read-only și extrage fișierele necesare într-un tmpfs privat.
 
 Rollbackul aplicației păstrează coloanele aditive; nu rulează Down și nu
 restaurează automat date peste modificările utilizatorilor. Folosește acest flux
