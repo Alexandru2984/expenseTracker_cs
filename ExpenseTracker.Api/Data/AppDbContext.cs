@@ -106,6 +106,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<SubscriptionItem>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint("CK_Subscriptions_TrialBillingDate", "\"TrialEndsOn\" IS NULL OR \"NextBillingDate\" >= \"TrialEndsOn\""));
             entity.HasKey(e => e.Id);
 
             entity.Property(e => e.Name)
@@ -131,6 +132,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.NextBillingDate)
                   .HasColumnType("date");
             entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+            entity.Property(e => e.Notes).IsRequired().HasMaxLength(2000).HasDefaultValue("");
+            entity.Property(e => e.ProviderUrl).IsRequired().HasMaxLength(2048).HasDefaultValue("");
+            entity.Property(e => e.TrialEndsOn).HasColumnType("date");
 
             entity.HasOne(e => e.User)
                   .WithMany()

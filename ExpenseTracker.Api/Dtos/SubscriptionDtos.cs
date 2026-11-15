@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using ExpenseTracker.Api.Models;
+using ExpenseTracker.Api.Infrastructure;
 
 namespace ExpenseTracker.Api.Dtos;
 
@@ -27,6 +28,7 @@ public class CreateSubscriptionDto : IValidatableObject
     public string Category { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
+    public SubscriptionDetailsDto? Details { get; set; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -36,6 +38,42 @@ public class CreateSubscriptionDto : IValidatableObject
             yield return new ValidationResult("Costul poate avea maximum două zecimale.", [nameof(Cost)]);
         if ((Name?.Any(char.IsControl) ?? false) || (Category?.Any(char.IsControl) ?? false))
             yield return new ValidationResult("Numele și categoria nu pot conține caractere de control.", [nameof(Name), nameof(Category)]);
+        if (Details is not null)
+        {
+            var errors = new List<ValidationResult>();
+            Validator.TryValidateObject(Details, new ValidationContext(Details), errors, true);
+            foreach (var error in errors)
+                yield return new ValidationResult(error.ErrorMessage, error.MemberNames.Select(m => $"Details.{m}"));
+            if (Details.TrialEndsOn > NextBillingDate)
+                yield return new ValidationResult("Prima scadență nu poate fi înaintea finalului perioadei de probă.", [nameof(NextBillingDate)]);
+        }
+    }
+}
+
+public class SubscriptionDetailsDto : IValidatableObject
+{
+    [StringLength(2000)]
+    public string? Notes { get; set; } = "";
+    [StringLength(2048)]
+    public string? ProviderUrl { get; set; } = "";
+    public DateOnly? TrialEndsOn { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Notes?.Any(c => char.IsControl(c) && c is not ('\n' or '\r' or '\t')) == true)
+            yield return new ValidationResult("Notele conțin caractere de control nepermise.", [nameof(Notes)]);
+        if (!ProviderLinks.TryNormalize(ProviderUrl, out _))
+            yield return new ValidationResult("Linkul furnizorului trebuie să fie un URL HTTP/HTTPS absolut, fără credențiale sau spații necodificate.", [nameof(ProviderUrl)]);
+        if (TrialEndsOn is { Year: < 1900 or > 9998 })
+            yield return new ValidationResult("Finalul perioadei de probă trebuie să fie în anii 1900–9998.", [nameof(TrialEndsOn)]);
+    }
+
+    public void ApplyTo(SubscriptionItem item)
+    {
+        if (!ProviderLinks.TryNormalize(ProviderUrl, out var url)) throw new ArgumentException("Invalid provider link.");
+        item.Notes = (Notes ?? "").Replace("\r\n", "\n").Replace('\r', '\n');
+        item.ProviderUrl = url;
+        item.TrialEndsOn = TrialEndsOn;
     }
 }
 
@@ -61,6 +99,7 @@ public class SubscriptionResponseDto
     public DateOnly NextBillingDate { get; set; }
     public string Category { get; set; } = string.Empty;
     public bool IsActive { get; set; }
+    public SubscriptionDetailsDto Details { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

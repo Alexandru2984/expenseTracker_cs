@@ -31,6 +31,9 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
    await page.route('https://analytics.micutu.com/**', route => route.abort());
    let items = Array.from({ length: 13 }, (_, i) => item(`00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, i === 1 ? 'Alpha service' : i === 0 ? 'Long' + 'x'.repeat(96) : `Service ${i + 1}`, i === 12 ? { currency: 'XTS' } : {}));
+   const noteLiteral = '<img src=x onerror="window.__noteExecuted=true">';
+   items[2].details = { notes: noteLiteral, providerUrl: 'https://supplier.example.invalid/account', trialEndsOn: date(2) };
+   items[3].details = { notes: '', providerUrl: 'javascript:window.__unsafeLink=true', trialEndsOn: null };
    let account = { username: 'dashboard-fixture', email: 'fixture@example.invalid', emailVerified: true, createdAt: new Date().toISOString(), pendingEmail: null, pendingEmailExpiresAt: null, emailRetryAfterSeconds: 0 };
    let budgets = [], budgetRevision = 1;
    let historyFailures = 1, staleUpdates = 0;
@@ -79,15 +82,18 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
      else { const all = sub.name === 'Alpha service' ? priceChanges : []; data = { subscriptionId: id, current: { cost: sub.cost, currency: sub.currency, billingPeriod: sub.billingPeriod }, total: all.length, skip, take, entries: all.slice(skip, skip + take) }; }
     }
     else if (/^\/api\/subscriptions\/[^/]+$/.test(url.pathname) && request.method() === 'PUT') {
-     staleUpdates++; assert.equal(request.postDataJSON().expectedUpdatedAt, items[1].updatedAt);
-     status = 409; data = { detail: 'Abonamentul a fost modificat între timp. Redeschide versiunea actuală.' };
+     const sub = items.find(s => s.id === url.pathname.split('/').at(-1));
+     assert.equal(request.postDataJSON().expectedUpdatedAt, sub.updatedAt);
+     if (sub.id === items[2].id) { Object.assign(sub, request.postDataJSON(), { updatedAt: new Date().toISOString() }); data = sub; }
+     else { staleUpdates++; status = 409; data = { detail: 'Abonamentul a fost modificat între timp. Redeschide versiunea actuală.' }; }
     }
     else if (url.pathname === '/api/subscriptions/insights') data = {
      asOfDate: date(), activeCount: active.length, inactiveCount: items.length - active.length, overdueCount: 1,
      overdue: [{ ...items[0], date: date(-2) }], upcoming: active.slice(0, 12).map(s => ({ ...s, date: date(2) })),
      byCategory: byCurrency.map(c => ({ category: 'SaaS', currency: c.currency, monthlyTotal: c.monthlyTotal })),
      forecast: Array.from({ length: 6 }, (_, i) => ({ month: month(i), paymentCount: active.length, byCurrency: byCurrency.map(c => ({ currency: c.currency, amount: c.monthlyTotal })) })),
-     pausedMonthly: [], savingsOpportunities: active.slice(1, 4).map(s => ({ id: s.id, name: s.name, currency: s.currency, monthlyTotal: s.cost }))
+     pausedMonthly: [], savingsOpportunities: active.slice(1, 4).map(s => ({ id: s.id, name: s.name, currency: s.currency, monthlyTotal: s.cost })),
+     trialCount: 1, trials: [{ id: items[2].id, name: items[2].name, endsOn: items[2].details.trialEndsOn, daysRemaining: Math.round((Date.parse(items[2].details.trialEndsOn) - Date.parse(date())) / 86400000), cost: items[2].cost, currency: items[2].currency, billingPeriod: items[2].billingPeriod }]
     };
     else if (url.pathname === '/api/subscriptions/calendar') { await route.fulfill({ status: 200, contentType: 'text/calendar', headers: { 'Content-Disposition': 'attachment; filename="abonamente.ics"' }, body: 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n' }); return; }
     else if (/\/api\/subscriptions\/[^/]+\/status$/.test(url.pathname)) { const id = url.pathname.split('/').at(-2); const sub = items.find(s => s.id === id); sub.isActive = request.postDataJSON().isActive; data = sub; }
@@ -115,6 +121,26 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
    const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Overflow at ${width}/${theme}`);
    await noOverflow(); checks++;
+   const provider = page.getByRole('link', { name: 'Pagina furnizorului Service 3: supplier.example.invalid', exact: true });
+   assert.equal(await provider.getAttribute('href'), 'https://supplier.example.invalid/account'); checks++;
+   assert.equal(await provider.getAttribute('rel'), 'noopener noreferrer'); assert.equal(await provider.getAttribute('referrerpolicy'), 'no-referrer'); checks++;
+   assert.equal(await page.locator('a[href^="javascript:"]').count(), 0); checks++;
+   await page.getByText('Note despre Service 3', { exact: true }).click();
+   assert.ok(await page.getByText(noteLiteral, { exact: true }).isVisible());
+   assert.equal(await page.evaluate(() => window.__noteExecuted), undefined); checks++;
+   await page.getByRole('button', { name: 'Revizuiește proba Service 3', exact: true }).click();
+   assert.equal(await page.getByLabel('Note personale (opțional)', { exact: true }).inputValue(), noteLiteral); checks++;
+   assert.equal(await page.getByLabel('Pagina furnizorului (opțional)', { exact: true }).inputValue(), 'https://supplier.example.invalid/account'); checks++;
+   await page.getByLabel('Final perioadă de probă (opțional)', { exact: true }).fill(date(3));
+   assert.equal(await page.getByLabel('Următoarea plată', { exact: true }).evaluate(input => input.checkValidity()), false); checks++;
+   await page.getByLabel('Următoarea plată', { exact: true }).fill(date(3));
+   await page.getByLabel('Note personale (opțional)', { exact: true }).fill('Plan probă\nCondiții verificate.');
+   const detailsAudit = await new AxeBuilder({ page }).include('#subscription-form').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+   assert.deepEqual(detailsAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), []); checks++;
+   await page.getByRole('button', { name: 'Salvează modificările', exact: true }).click();
+   await page.locator('#subscription-form').waitFor({ state: 'detached' });
+   assert.equal(items[2].details.trialEndsOn, date(3)); assert.equal(items[2].details.notes, 'Plan probă\nCondiții verificate.'); checks++;
+   await page.getByText('Se încheie în 3 zile', { exact: false }).waitFor(); checks++;
    await page.getByRole('button', { name: 'Arată 1 grup posibil duplicat', exact: true }).click();
    await page.getByRole('button', { name: 'Revizuiește Alpha service 120,00 EUR', exact: true }).waitFor(); checks++;
    const includePausedRequest = page.waitForRequest(r => new URL(r.url()).pathname === '/api/subscriptions/duplicates' && new URL(r.url()).searchParams.get('includeInactive') === 'true');

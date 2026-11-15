@@ -38,7 +38,7 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> GetAll(
         [FromQuery] int skip = 0,
         [FromQuery] int take = 50,
-        [FromQuery] string? search = null,
+        [FromQuery, StringLength(200)] string? search = null,
         [FromQuery] string? sortBy = "name",
         [FromQuery] bool sortDesc = false,
         [FromQuery] string? status = null)
@@ -60,7 +60,7 @@ public class SubscriptionsController : ControllerBase
         {
             var searchLower = search.ToLower();
             query = query.Where(s => s.Name.ToLower().Contains(searchLower) ||
-                                     s.Category.ToLower().Contains(searchLower));
+                                     s.Category.ToLower().Contains(searchLower) || s.Notes.ToLower().Contains(searchLower));
         }
 
         query = sortBy?.ToLower() switch
@@ -102,7 +102,7 @@ public class SubscriptionsController : ControllerBase
         var items = await _db.Subscriptions.Where(s => s.UserId == userId).OrderBy(s => s.Name).ToListAsync();
 
         var sb = new StringBuilder();
-        sb.AppendLine("Id,Name,Cost,Currency,BillingPeriod,NextBillingDate,Category,IsActive,CreatedAt");
+        sb.AppendLine("Id,Name,Cost,Currency,BillingPeriod,NextBillingDate,Category,IsActive,CreatedAt,Notes,ProviderUrl,TrialEndsOn");
 
         foreach (var item in items)
         {
@@ -116,7 +116,8 @@ public class SubscriptionsController : ControllerBase
                 item.NextBillingDate.ToString("yyyy-MM-dd"),
                 Csv.Field(item.Category),
                 item.IsActive,
-                item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")));
+                item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                Csv.Field(item.Notes), Csv.Field(item.ProviderUrl), item.TrialEndsOn?.ToString("yyyy-MM-dd") ?? ""));
         }
 
         // UTF-8 BOM so Excel opens accented characters correctly
@@ -155,7 +156,8 @@ public class SubscriptionsController : ControllerBase
         int Col(string name) => header.IndexOf(name);
         int iName = Col("name"), iCost = Col("cost"), iCur = Col("currency"),
             iPeriod = Col("billingperiod"), iDate = Col("nextbillingdate"),
-            iCat = Col("category"), iActive = Col("isactive");
+            iCat = Col("category"), iActive = Col("isactive"),
+            iNotes = Col("notes"), iProvider = Col("providerurl"), iTrial = Col("trialendson");
 
         if (iName < 0 || iCost < 0 || iDate < 0)
             return BadRequest(new ProblemDetails
@@ -176,7 +178,7 @@ public class SubscriptionsController : ControllerBase
         for (int r = 1; r < rows.Count; r++)
         {
             var row = rows[r];
-            string Get(int idx) => idx >= 0 && idx < row.Count ? row[idx].Trim() : "";
+            string Get(int idx, bool trim = true) => idx >= 0 && idx < row.Count ? trim ? row[idx].Trim() : row[idx] : "";
 
             var name = Get(iName);
             void Reject(string message) { rejected++; if (errors.Count < 10) errors.Add($"Rândul {r + 1}: {message}"); }
@@ -191,15 +193,23 @@ public class SubscriptionsController : ControllerBase
             var isActive = true;
             if (iActive >= 0 && !bool.TryParse(Get(iActive), out isActive))
             { Reject("IsActive trebuie să fie true sau false."); continue; }
+            DateOnly? trial = null;
+            if (Get(iTrial).Length > 0)
+            {
+                if (!DateOnly.TryParseExact(Get(iTrial), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var trialDate))
+                { Reject("final de probă invalid (folosește YYYY-MM-DD)."); continue; }
+                trial = trialDate;
+            }
             var dto = new CreateSubscriptionDto { Name = name, Cost = cost,
                 Currency = iCur >= 0 ? Get(iCur).ToUpperInvariant() : "RON", BillingPeriod = period,
-                NextBillingDate = date, Category = iCat >= 0 ? Get(iCat) : "", IsActive = isActive };
+                NextBillingDate = date, Category = iCat >= 0 ? Get(iCat) : "", IsActive = isActive,
+                Details = new() { Notes = Get(iNotes, false), ProviderUrl = Get(iProvider, false), TrialEndsOn = trial } };
             var validation = new List<ValidationResult>();
             if (!Validator.TryValidateObject(dto, new ValidationContext(dto), validation, true))
             { Reject(string.Join(" ", validation.Select(v => v.ErrorMessage))); continue; }
             if (existing.Contains(name.ToLowerInvariant())) { skipped++; continue; }
 
-            _db.Subscriptions.Add(new SubscriptionItem
+            var item = new SubscriptionItem
             {
                 Id = Guid.NewGuid(),
                 Name = name,
@@ -210,7 +220,9 @@ public class SubscriptionsController : ControllerBase
                 Category = dto.Category,
                 IsActive = isActive,
                 UserId = userId
-            });
+            };
+            dto.Details.ApplyTo(item);
+            _db.Subscriptions.Add(item);
             existing.Add(name.ToLowerInvariant());
             imported++;
         }
@@ -255,6 +267,7 @@ public class SubscriptionsController : ControllerBase
             UserId = GetUserId()
         };
 
+        dto.Details?.ApplyTo(item);
         _db.Subscriptions.Add(item);
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = item.Id }, ToDto(item));
@@ -270,6 +283,9 @@ public class SubscriptionsController : ControllerBase
         if (dto.ExpectedUpdatedAt is { } expected && expected.UtcDateTime.Ticks / 10 != existing.UpdatedAt.Ticks / 10)
             return Conflict(new ProblemDetails { Title = "Abonamentul a fost modificat între timp.",
                 Detail = "Reîncarcă lista și redeschide abonamentul actual înainte de salvare. Datele introduse au fost păstrate." });
+        var trialEndsOn = dto.Details is null ? existing.TrialEndsOn : dto.Details.TrialEndsOn;
+        if (trialEndsOn > dto.NextBillingDate)
+            return BadRequest(new ProblemDetails { Title = "Prima scadență nu poate fi înaintea finalului perioadei de probă." });
 
         existing.Name = dto.Name.Trim();
         existing.Cost = dto.Cost;
@@ -278,6 +294,7 @@ public class SubscriptionsController : ControllerBase
         existing.NextBillingDate = dto.NextBillingDate;
         existing.Category = dto.Category?.Trim() ?? "";
         existing.IsActive = dto.IsActive;
+        dto.Details?.ApplyTo(existing);
 
         await _db.SaveChangesAsync();
         return Ok(ToDto(existing));
@@ -383,6 +400,7 @@ public class SubscriptionsController : ControllerBase
         NextBillingDate = item.NextBillingDate,
         Category = item.Category,
         IsActive = item.IsActive,
+        Details = new() { Notes = item.Notes, ProviderUrl = item.ProviderUrl, TrialEndsOn = item.TrialEndsOn },
         CreatedAt = item.CreatedAt,
         UpdatedAt = item.UpdatedAt
     };

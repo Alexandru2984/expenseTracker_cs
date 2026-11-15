@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue'
 import { CalendarDays, TrendingUp, Sparkles, AlertCircle, Download } from 'lucide-vue-next'
 
-const props = defineProps({ data: { type: Object, default: null }, exporting: Boolean })
-defineEmits(['calendar'])
+const props = defineProps({ data: { type: Object, default: null }, exporting: Boolean, reviewing: Boolean })
+defineEmits(['calendar', 'review'])
 const selectedMonth = ref('')
 const selectedSavings = ref([])
 const months = computed(() => props.data?.forecast ?? [])
@@ -68,6 +68,18 @@ function monthLabel(value) {
         <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">Cel mult 12 plăți afișate. Exportul .ics include următoarea scadență salvată a fiecărui abonament activ.</p>
       </article>
     </div>
+    <article v-if="data.trials?.length" class="panel p-5 sm:p-6 space-y-3" aria-labelledby="trials-title">
+      <h3 id="trials-title" class="font-semibold flex items-center gap-2"><AlertCircle :size="18" class="text-violet-600 dark:text-violet-300" aria-hidden="true" /> Perioade de probă de verificat</h3>
+      <p class="text-xs text-gray-600 dark:text-gray-300">Verifică sau anulează planul în pagina furnizorului înainte de scadență. Sunt afișate până la 12 termene apropiate de azi, din {{ data.trialCount }} înregistrate.</p>
+      <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <li v-for="trial in data.trials" :key="trial.id" class="min-w-0 border border-violet-200 dark:border-violet-500/30 rounded-2xl p-4 space-y-2 text-sm">
+          <p class="font-semibold break-words">{{ trial.name }}</p>
+          <p class="text-xs font-semibold text-violet-800 dark:text-violet-200">{{ trial.daysRemaining < 0 ? 'Probă încheiată' : trial.daysRemaining === 0 ? 'Se încheie azi' : `Se încheie în ${trial.daysRemaining} zile` }} · {{ dateLabel(trial.endsOn) }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-300">După probă: {{ amount(trial.cost) }} {{ trial.currency }} / {{ trial.billingPeriod === 'Yearly' ? 'an' : 'lună' }}</p>
+          <button type="button" @click="$emit('review', trial.id)" :disabled="reviewing" :aria-label="`Revizuiește proba ${trial.name}`" class="text-xs font-semibold text-indigo-700 dark:text-indigo-300 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 px-3 py-2 disabled:opacity-50">Revizuiește</button>
+        </li>
+      </ul>
+    </article>
     <article v-if="opportunities.length" class="panel p-5 sm:p-6" aria-labelledby="savings-title">
       <h3 id="savings-title" class="font-semibold flex items-center gap-2"><Sparkles :size="18" class="text-violet-500" /> Simulator de economii</h3>
       <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Selectează abonamentele pe care le-ai putea suspenda. Simularea nu modifică abonamentele.</p>

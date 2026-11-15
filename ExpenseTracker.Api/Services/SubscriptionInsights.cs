@@ -7,10 +7,12 @@ public sealed record CategoryAmount(string Category, string Currency, decimal Mo
 public sealed record PlannedPayment(Guid Id, string Name, decimal Cost, string Currency, DateOnly Date, string Category);
 public sealed record ForecastMonth(string Month, int PaymentCount, IReadOnlyList<CurrencyAmount> ByCurrency);
 public sealed record SavingsOpportunity(Guid Id, string Name, string Currency, decimal MonthlyTotal);
+public sealed record TrialReminder(Guid Id, string Name, DateOnly EndsOn, int DaysRemaining, decimal Cost, string Currency, BillingPeriod BillingPeriod);
 public sealed record SubscriptionInsightsResult(DateOnly AsOfDate, int ActiveCount, int InactiveCount,
     int OverdueCount, IReadOnlyList<PlannedPayment> Overdue, IReadOnlyList<PlannedPayment> Upcoming,
     IReadOnlyList<CategoryAmount> ByCategory, IReadOnlyList<ForecastMonth> Forecast,
-    IReadOnlyList<CurrencyAmount> PausedMonthly, IReadOnlyList<SavingsOpportunity> SavingsOpportunities);
+    IReadOnlyList<CurrencyAmount> PausedMonthly, IReadOnlyList<SavingsOpportunity> SavingsOpportunities,
+    int TrialCount, IReadOnlyList<TrialReminder> Trials);
 
 public static class SubscriptionInsights
 {
@@ -62,9 +64,12 @@ public static class SubscriptionInsights
         var savings = active.GroupBy(s => s.Currency).OrderBy(g => g.Key)
             .SelectMany(g => g.OrderByDescending(MonthlyCost).ThenBy(s => s.Id).Take(3)
                 .Select(s => new SavingsOpportunity(s.Id, s.Name, s.Currency, Math.Round(MonthlyCost(s), 2)))).ToList();
+        var trials = active.Where(s => s.TrialEndsOn.HasValue)
+            .Select(s => new TrialReminder(s.Id, s.Name, s.TrialEndsOn!.Value, s.TrialEndsOn.Value.DayNumber - today.DayNumber, s.Cost, s.Currency, s.BillingPeriod))
+            .OrderBy(s => Math.Abs(s.DaysRemaining)).ThenBy(s => s.EndsOn).ThenBy(s => s.Id).ToList();
         return new(today, active.Count, items.Count - active.Count, overdue.Count,
             overdue.Take(12).Select(s => new PlannedPayment(s.Id, s.Name, s.Cost, s.Currency, s.NextBillingDate, s.Category)).ToList(),
             payments.Where(p => p.Date <= today.AddDays(30)).OrderBy(p => p.Date).ThenBy(p => p.Id).Take(12).ToList(),
-            categories, forecast, paused, savings);
+            categories, forecast, paused, savings, trials.Count, trials.Take(12).ToList());
     }
 }

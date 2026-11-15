@@ -35,6 +35,7 @@ Funcționalități principale:
 - Backoff persistent la login și username unic indiferent de majuscule
 - Istoric al prețurilor, variații lunare, paginare și protecție la formulare vechi
 - Detectarea posibilelor duplicate pe întregul cont, cu revizuire manuală
+- Note personale, link validat către furnizor și evidența perioadelor de probă
 - Grafice pe întregul cont și sursa cursului valutar afișată explicit
 
 ---

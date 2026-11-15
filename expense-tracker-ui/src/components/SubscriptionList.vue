@@ -1,4 +1,5 @@
 <script setup>
+import { providerLink, trialInfo } from '../subscriptionDetails.js'
 defineProps({
   subscriptions: {
     type: Array,
@@ -98,6 +99,15 @@ function dueInfo(sub) {
       </div>
 
       <!-- Actions -->
+      <div v-if="sub.details?.trialEndsOn" class="rounded-xl px-3 py-2 text-xs bg-violet-50 dark:bg-violet-500/10 text-violet-800 dark:text-violet-200">
+        <p class="font-semibold">{{ trialInfo(sub.details.trialEndsOn)?.label }}</p>
+        <p class="mt-1">Final probă: {{ formatDate(sub.details.trialEndsOn) }}</p>
+      </div>
+      <a v-if="providerLink(sub.details?.providerUrl)" :href="providerLink(sub.details.providerUrl).href" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" :aria-label="`Pagina furnizorului ${sub.name}: ${providerLink(sub.details.providerUrl).host}`" class="text-xs font-semibold text-indigo-700 dark:text-indigo-300 py-2 break-all hover:underline">{{ providerLink(sub.details.providerUrl).host }} ↗</a>
+      <details v-if="sub.details?.notes" class="text-xs rounded-xl bg-gray-50 dark:bg-gray-800 p-3">
+        <summary class="cursor-pointer font-semibold text-gray-700 dark:text-gray-200">Note despre {{ sub.name }}</summary>
+        <p class="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere] text-gray-600 dark:text-gray-300">{{ sub.details.notes }}</p>
+      </details>
       <button type="button" @click="emit('history', sub)" :aria-label="`Istoric preț ${sub.name}`" class="text-left text-xs font-semibold text-indigo-700 dark:text-indigo-300 py-2 hover:underline">Istoric preț →</button>
       <div class="flex flex-wrap gap-2">
         <button type="button" :disabled="pendingIds.has(sub.id)" @click="emit('status', sub)" :aria-label="`${sub.isActive ? 'Suspendă' : 'Reactivează'} ${sub.name}`" class="flex-1 text-xs font-semibold rounded-xl px-3 py-2.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 disabled:opacity-50">{{ sub.isActive ? 'Suspendă' : 'Reactivează' }}</button>

@@ -403,7 +403,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <PlanningPanel :data="insights" :exporting="exportingCalendar" @calendar="handleCalendar" />
+          <PlanningPanel :data="insights" :exporting="exportingCalendar" :reviewing="reviewing" @calendar="handleCalendar" @review="handleReview" />
           <BudgetPanel :refresh-key="summary" :categories="insights?.byCategory ?? []" @toast="(m, t) => showToast(m, t)" />
           <DuplicatePanel :refresh-key="summary" :reviewing="reviewing" @review="handleReview" />
 

@@ -19,7 +19,8 @@ const empty = () => ({
   billingPeriod: 'Monthly',
   nextBillingDate: new Date().toISOString().slice(0, 10),
   category: '',
-  isActive: true
+  isActive: true,
+  details: { notes: '', providerUrl: '', trialEndsOn: null }
 })
 
 const form = ref(empty())
@@ -30,6 +31,7 @@ watch(
     if (item) {
       form.value = {
         ...item,
+        details: { ...empty().details, ...item.details },
         nextBillingDate: item.nextBillingDate.slice(0, 10)
       }
     } else {
@@ -44,6 +46,7 @@ function handleSubmit() {
   const payload = {
     ...form.value,
     cost: parseFloat(form.value.cost),
+    details: { ...form.value.details, trialEndsOn: form.value.details.trialEndsOn || null },
     nextBillingDate: form.value.nextBillingDate  // DateOnly: YYYY-MM-DD
   }
   emit('submit', payload)
@@ -73,7 +76,7 @@ function handleSubmit() {
 
       <!-- Cost -->
       <div>
-        <label for="subscription-cost" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Cost</label>
+        <label for="subscription-cost" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">{{ form.details.trialEndsOn ? 'Cost după probă' : 'Cost' }}</label>
         <input
           id="subscription-cost"
           max="1000000"
@@ -121,7 +124,7 @@ function handleSubmit() {
         <label for="subscription-date" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Următoarea plată</label>
         <input
           id="subscription-date"
-          min="1900-01-01"
+          :min="form.details.trialEndsOn || '1900-01-01'"
           max="9998-12-31"
           v-model="form.nextBillingDate"
           type="date"
@@ -154,6 +157,20 @@ function handleSubmit() {
       </div>
 
       <!-- Buttons -->
+      <div>
+        <label for="subscription-trial" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Final perioadă de probă (opțional)</label>
+        <input id="subscription-trial" v-model="form.details.trialEndsOn" type="date" min="1900-01-01" max="9998-12-31" class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white outline-none focus:ring-2 ring-indigo-500/20" />
+        <p class="text-xs text-gray-600 dark:text-gray-300 mt-2">Alege prima scadență la finalul probei sau mai târziu.</p>
+      </div>
+      <div>
+        <label for="subscription-provider" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Pagina furnizorului (opțional)</label>
+        <input id="subscription-provider" v-model="form.details.providerUrl" type="url" maxlength="2048" placeholder="https://furnizor.example/cont" class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20" />
+      </div>
+      <div class="sm:col-span-2">
+        <label for="subscription-notes" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Note personale (opțional)</label>
+        <textarea id="subscription-notes" v-model="form.details.notes" maxlength="2000" rows="3" placeholder="Plan, condiții de reînnoire, lucruri de verificat…" class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20" />
+        <p class="text-xs text-gray-600 dark:text-gray-300 mt-1">{{ form.details.notes?.length ?? 0 }} / 2000 caractere</p>
+      </div>
       <div class="sm:col-span-2 flex gap-4 pt-2">
         <button
           type="submit"
