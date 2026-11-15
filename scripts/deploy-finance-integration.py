@@ -214,16 +214,17 @@ def main():
     api_changed=False
     nginx_changed=False
     pin_changed=False
+    # Abort preflight without rolling back configuration changed by an operator.
+    current=json.loads(command(['docker','inspect','expensetracker_cs-api-1','expensetracker_cs-db-1'],text=True).stdout)
+    if [item['Id'] for item in current]!=[item['Id'] for item in active]:
+        raise RuntimeError('Live containers changed during the restore drill; retry with a fresh backup')
+    if migration_history('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB'])!=before:
+        raise RuntimeError('Live migration history changed during the restore drill')
+    if envfile.read_bytes()!=old_env or nginx.read_bytes()!=old_nginx or read_compose_pin(ROOT)!=old_pin:
+        raise RuntimeError('Live configuration changed during the restore drill')
+    if command(git+['rev-parse','HEAD'],cwd=ROOT,text=True).stdout.strip()!=full_revision or command(git+['status','--porcelain'],cwd=ROOT,text=True).stdout.strip():
+        raise RuntimeError('Reviewed source changed during the restore drill')
     try:
-        current=json.loads(command(['docker','inspect','expensetracker_cs-api-1','expensetracker_cs-db-1'],text=True).stdout)
-        if [item['Id'] for item in current]!=[item['Id'] for item in active]:
-            raise RuntimeError('Live containers changed during the restore drill; retry with a fresh backup')
-        if migration_history('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB'])!=before:
-            raise RuntimeError('Live migration history changed during the restore drill')
-        if envfile.read_bytes()!=old_env or nginx.read_bytes()!=old_nginx or read_compose_pin(ROOT)!=old_pin:
-            raise RuntimeError('Live configuration changed during the restore drill')
-        if command(git+['rev-parse','HEAD'],cwd=ROOT,text=True).stdout.strip()!=full_revision or command(git+['status','--porcelain'],cwd=ROOT,text=True).stdout.strip():
-            raise RuntimeError('Reviewed source changed during the restore drill')
         if pending:
             networks=set(active[0]['NetworkSettings']['Networks']) & set(active[1]['NetworkSettings']['Networks'])
             if len(networks)!=1:raise RuntimeError('Expected exactly one shared API/database network')
