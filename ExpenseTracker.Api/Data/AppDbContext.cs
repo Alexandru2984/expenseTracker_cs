@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
 
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
     public DbSet<MonthlyBudget> Budgets => Set<MonthlyBudget>();
+    public DbSet<SubscriptionPriceChange> SubscriptionPriceChanges => Set<SubscriptionPriceChange>();
 
     public Task<User?> FindUserByUsernameAsync(string username)
     {
@@ -29,8 +30,21 @@ public class AppDbContext : DbContext
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        foreach (var entry in ChangeTracker.Entries<SubscriptionItem>())
+        var changes = new List<SubscriptionPriceChange>();
+        foreach (var entry in ChangeTracker.Entries<SubscriptionItem>().ToList())
         {
+            if (entry.State == EntityState.Modified
+                && (entry.Property(s => s.Cost).OriginalValue != entry.Entity.Cost
+                    || entry.Property(s => s.Currency).OriginalValue != entry.Entity.Currency
+                    || entry.Property(s => s.BillingPeriod).OriginalValue != entry.Entity.BillingPeriod))
+                changes.Add(new SubscriptionPriceChange
+                {
+                    SubscriptionId = entry.Entity.Id, ChangedAt = now,
+                    PreviousCost = entry.Property(s => s.Cost).OriginalValue,
+                    PreviousCurrency = entry.Property(s => s.Currency).OriginalValue,
+                    PreviousBillingPeriod = entry.Property(s => s.BillingPeriod).OriginalValue,
+                    Cost = entry.Entity.Cost, Currency = entry.Entity.Currency, BillingPeriod = entry.Entity.BillingPeriod
+                });
             if (entry.State == EntityState.Added)
                 entry.Entity.CreatedAt = now;
             if (entry.State is EntityState.Added or EntityState.Modified)
@@ -45,12 +59,37 @@ public class AppDbContext : DbContext
                 entry.Entity.Version = Guid.NewGuid();
             }
         }
-        return base.SaveChangesAsync(cancellationToken);
+        SubscriptionPriceChanges.AddRange(changes);
+        return SaveWithHistoryAsync(changes, cancellationToken);
+    }
+
+    private async Task<int> SaveWithHistoryAsync(List<SubscriptionPriceChange> changes, CancellationToken ct)
+    {
+        try { return await base.SaveChangesAsync(ct); }
+        catch
+        {
+            // Retrying a failed save in the same context must not duplicate events.
+            foreach (var change in changes) Entry(change).State = EntityState.Detached;
+            throw;
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<SubscriptionPriceChange>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Cost).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.PreviousCost).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.Currency).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.PreviousCurrency).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.BillingPeriod).HasConversion<string>();
+            entity.Property(e => e.PreviousBillingPeriod).HasConversion<string>();
+            entity.HasIndex(e => new { e.SubscriptionId, e.ChangedAt, e.Id });
+            entity.HasOne(e => e.Subscription).WithMany().HasForeignKey(e => e.SubscriptionId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<MonthlyBudget>(entity =>
         {
@@ -74,9 +113,11 @@ public class AppDbContext : DbContext
                   .HasMaxLength(100);
 
             entity.Property(e => e.Cost)
+                  .IsConcurrencyToken()
                   .HasColumnType("numeric(18,2)");
 
             entity.Property(e => e.Currency)
+                  .IsConcurrencyToken()
                   .IsRequired()
                   .HasMaxLength(10);
 
@@ -84,10 +125,12 @@ public class AppDbContext : DbContext
                   .HasMaxLength(100);
 
             entity.Property(e => e.BillingPeriod)
+                  .IsConcurrencyToken()
                   .HasConversion<string>();
 
             entity.Property(e => e.NextBillingDate)
                   .HasColumnType("date");
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
 
             entity.HasOne(e => e.User)
                   .WithMany()

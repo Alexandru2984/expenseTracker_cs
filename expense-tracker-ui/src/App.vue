@@ -8,6 +8,7 @@ import ConfirmModal from './components/ConfirmModal.vue'
 import AccountSettings from './components/AccountSettings.vue'
 import PlanningPanel from './components/PlanningPanel.vue'
 import BudgetPanel from './components/BudgetPanel.vue'
+import PriceHistoryDialog from './components/PriceHistoryDialog.vue'
 import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight, Settings } from 'lucide-vue-next'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
 import { Doughnut, Bar } from 'vue-chartjs'
@@ -30,6 +31,7 @@ const subscriptions = ref([]), summary = ref(null), insights = ref(null), totalI
 const loading = ref(false), error = ref(null), saving = ref(false), importBusy = ref(false)
 const exportingCsv = ref(false), exportingCalendar = ref(false), logoutBusy = ref(false)
 const editingItem = ref(null), initialItem = ref(null), showForm = ref(false), importReport = ref(null)
+const historyItem = ref(null)
 const pendingIds = ref(new Set())
 const filters = ref({ search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 })
 const currentPage = computed(() => Math.floor(filters.value.skip / filters.value.take) + 1)
@@ -131,6 +133,7 @@ function resetAuthState() {
   isAuthenticated.value = false; currentUser.value = ''; account.value = null; showSettings.value = false
   subscriptions.value = []; summary.value = null; insights.value = null; totalItems.value = 0
   editingItem.value = null; initialItem.value = null; showForm.value = false; importReport.value = null
+  historyItem.value = null
   error.value = null; loading.value = false; toasts.value = []
   if (confirmModal.value.visible) onCancel()
   filters.value = { search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 }
@@ -206,11 +209,14 @@ async function handleSubmit(payload) {
   saving.value = true
   const id = editingItem.value?.id
   try {
-    if (id) await subscriptionsApi.update(id, payload)
+    if (id) await subscriptionsApi.update(id, { ...payload, expectedUpdatedAt: editingItem.value.updatedAt })
     else await subscriptionsApi.create(payload)
     handleCancel(); await fetchAll()
     showToast(id ? 'Abonament actualizat.' : 'Abonament adăugat.', 'success')
-  } catch (e) { showToast(errorMessage(e, 'Eroare la salvare. Datele introduse au fost păstrate.')) }
+  } catch (e) {
+    showToast(errorMessage(e, 'Eroare la salvare. Datele introduse au fost păstrate.'))
+    if (e.response?.status === 409) await fetchAll()
+  }
   finally { saving.value = false }
 }
 async function handleDelete(id) {
@@ -450,7 +456,8 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-            <SubscriptionList v-else :subscriptions="subscriptions" :pending-ids="pendingIds" @edit="handleEdit" @delete="handleDelete" @status="handleStatus" @duplicate="handleDuplicate" />
+            <SubscriptionList v-else :subscriptions="subscriptions" :pending-ids="pendingIds" @edit="handleEdit" @delete="handleDelete" @status="handleStatus" @duplicate="handleDuplicate" @history="item => historyItem = item" />
+            <PriceHistoryDialog v-if="historyItem" :key="historyItem.id" :subscription="historyItem" @close="historyItem = null" />
 
             <!-- Pagination -->
             <div class="p-4 border-t border-gray-200 dark:border-gray-800 flex flex-wrap gap-3 items-center justify-between">

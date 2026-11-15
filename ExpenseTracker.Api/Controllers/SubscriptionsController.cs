@@ -229,6 +229,14 @@ public class SubscriptionsController : ControllerBase
         return Ok(ToDto(item));
     }
 
+    // GET /api/subscriptions/{id}/price-history
+    [HttpGet("{id:guid}/price-history")]
+    public async Task<IActionResult> GetPriceHistory(Guid id, [FromQuery] int skip = 0, [FromQuery] int take = 20, CancellationToken ct = default)
+    {
+        var history = await PriceHistory.ReadAsync(_db, GetUserId(), id, skip, take, ct);
+        return history is null ? NotFound() : Ok(history);
+    }
+
     // POST /api/subscriptions
     [HttpPost]
     [EnableRateLimiting("writes")]
@@ -259,6 +267,9 @@ public class SubscriptionsController : ControllerBase
     {
         var existing = await _db.Subscriptions.FindAsync(id);
         if (existing is null || existing.UserId != GetUserId()) return NotFound();
+        if (dto.ExpectedUpdatedAt is { } expected && expected.UtcDateTime.Ticks / 10 != existing.UpdatedAt.Ticks / 10)
+            return Conflict(new ProblemDetails { Title = "Abonamentul a fost modificat între timp.",
+                Detail = "Reîncarcă lista și redeschide abonamentul actual înainte de salvare. Datele introduse au fost păstrate." });
 
         existing.Name = dto.Name.Trim();
         existing.Cost = dto.Cost;

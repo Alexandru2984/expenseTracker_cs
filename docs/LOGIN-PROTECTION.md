@@ -35,10 +35,10 @@ eșuează la restore drill; nu se redenumesc, combină sau șterg conturi automa
 Rollback-ul aplicației păstrează schema aditivă. API-ul vechi poate citi schema,
 dar nu aplică backoff-ul nou; rollback-ul este o măsură temporară de recuperare.
 
-Verificare: 17 teste de autentificare trecute pe PostgreSQL temporar inițializat
-prin migrații, fără skip, inclusiv înregistrări/parole concurente, username non-ASCII,
-recuperare cont și sesiune existentă în timpul blocării. Suita completă a trecut
-cu 126 teste înaintea ultimei regresii non-ASCII; se repetă după etapa de istoric.
+Verificare: teste de autentificare trecute pe PostgreSQL temporar inițializat prin
+migrații, fără skip, inclusiv înregistrări/parole concurente, username non-ASCII,
+recuperare cont și sesiune existentă în timpul blocării. Suita completă după etapa
+de istoric are 136 teste trecute; dovezile lansării sunt în audit.
 
 ## Referințe
 

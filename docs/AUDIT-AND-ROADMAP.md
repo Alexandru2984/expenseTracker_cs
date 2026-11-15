@@ -267,3 +267,31 @@ migrații, fără skip; 259 verificări dashboard la 1440/390/320 px în light/d
 24 verificări UI Finance. Acestea acoperă scenariile implementate, nu certifică
 absența tuturor vulnerabilităților. CI de pe GitHub rămâne de executat după
 publicarea commiturilor; nu s-a făcut push.
+
+## Continuare: login distribuit și evoluția prețurilor
+
+- [LOGIN-PROTECTION.md](LOGIN-PROTECTION.md): backoff persistent pe cont, pauze
+  fără prelungire la trafic, recuperare prin cod, sesiuni existente păstrate.
+  Username unic case-insensitive în PostgreSQL, căutare cu aceeași mapare în DB
+  și răspuns 409 la cursa dintre înregistrări. Fără combinarea conturilor vechi.
+- [PRICE-HISTORY.md](PRICE-HISTORY.md): evenimente de cost/valută/frecvență atomice,
+  diferențe lunare și procente numai când sunt comparabile, dialog responsive
+  cu paginare/erori/tastatură și protecție împotriva formularelor rămase vechi.
+  Snapshotul Finance existent rămâne schemaVersion 1; istoricul este o resursă
+  opțională separată pentru consumatorul F#.
+- [Review și runbook](SECURITY-REVIEW-LOGIN-HISTORY.md): top amenințări, impact,
+  detecție disponibilă, lipsa alertării externe și procedura de recuperare.
+  Exercițiul tehnic pe conturi sintetice include blocarea, concurența și recuperarea.
+- 136 teste backend trecute pe PostgreSQL temporar, fără skip, pornit prin
+  migrațiile reale. Include verificarea snapshotului EF, editări concurente cu
+  rollback al evenimentului pierzător și ștergere în cascadă a istoricului.
+- Browser: 113 aserțiuni trecute pentru fiecare rezoluție 1440/390/320 px, în
+  light/dark, în trei loturi (339 execuții de aserțiuni; proba de refresh între
+  taburi se repetă în fiecare lot). Suplimentar 24 verificări ale panoului Finance.
+  O rulare monolitică întreruptă nu este contabilizată drept succes.
+
+Următoarele funcții de produs prioritizate: identificarea duplicatelor pe întregul
+cont cu revizuire manuală; note/link furnizor și perioade de probă; obiective de
+economisire persistente; outbox SMTP și notificări cu opt-in/fus orar. MFA/passkeys,
+alertarea externă și backupul off-site rămân priorități de securitate/operare.
+Aceste puncte sunt planificate, nu declarate implementate.

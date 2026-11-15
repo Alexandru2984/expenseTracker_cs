@@ -32,6 +32,8 @@ Funcționalități principale:
 - Suspendare/reactivare, duplicare prin formular și gestionarea sesiunilor active
 - Bugete lunare persistente pe valută/categorie, prag depășit și editare cu versiuni
 - Schimbare email cu confirmare înainte de înlocuirea adresei și cooldown pe cont
+- Backoff persistent la login și username unic indiferent de majuscule
+- Istoric al prețurilor, variații lunare, paginare și protecție la formulare vechi
 - Grafice pe întregul cont și sursa cursului valutar afișată explicit
 
 ---
@@ -157,6 +159,7 @@ necesită header `X-CSRF-Token` egal cu cookie-ul `csrf_token` (double-submit). 
 | `GET` | `/api/subscriptions/insights` | Prognoză, categorii, plăți viitoare, scadențe vechi și economii |
 | `GET` | `/api/subscriptions/calendar` | Export ICS al următoarelor scadențe salvate |
 | `POST` | `/api/subscriptions/{id}/status` | Suspendare/reactivare (`{ isActive: false/true }`) |
+| `GET` | `/api/subscriptions/{id}/price-history` | Istoric propriu de cost/valută/frecvență, paginat |
 | `GET` / `DELETE` | `/api/account/sessions[/{id}]` | Listare/revocare sesiuni proprii |
 | `GET` / `POST` | `/api/budgets` | Listare și creare bugete proprii |
 | `PUT` / `DELETE` | `/api/budgets/{id}` | Editare/ștergere cu versiunea curentă |
@@ -215,6 +218,7 @@ token-urilor, rezolvarea IP-ului real, izolarea pe utilizator (ownership) și fl
 [Constatări, remedieri verificate și etapele următoare](docs/AUDIT-AND-ROADMAP.md).
 
 Detalii: [securitatea conturilor](docs/ACCOUNT-SECURITY.md) și [bugete lunare](docs/BUDGETS.md).
+Continuare: [protecția loginului](docs/LOGIN-PROTECTION.md) și [istoricul prețurilor](docs/PRICE-HISTORY.md).
 
 ## Conectare cu Finance F#
 

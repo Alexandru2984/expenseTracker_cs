@@ -32,6 +32,21 @@ name, cost, currency, billingPeriod (Monthly/Yearly), nextBillingDate, category,
 updatedAt. Fără email, username, UserId sau informații de autentificare. Răspunsurile API
 sunt no-store și nu se loghează corpuri/tokenuri.
 
+## Istoric opțional de preț
+
+`GET /api/integrations/finance/subscriptions/{sourceId}/price-history?skip=0&take=20`
+folosește același token fin_ read-only. Contract separat, schemaVersion 1:
+generatedAt, tokenExpiresAt și history { subscriptionId, current, total, skip, take,
+entries }. Structura history și regulile de calcul sunt în [PRICE-HISTORY.md](PRICE-HISTORY.md).
+take este limitat la 100. ID-ul unui abonament străin produce 404; cookie-urile,
+JWT-urile normale, tokenurile revocate/expirate nu autorizează ruta.
+
+Consumatorul F# poate cere istoricul numai la deschiderea unui abonament sau la
+diagnostic; snapshotul și logica existente rămân compatibile. Pentru paginări care
+se suprapun peste editări noi, deduplică după ID și reîncarcă de la zero. Endpointul
+nu creează plăți și nu permite scriere. În această etapă se extinde API-ul C#;
+nu se declară implementată o interfață nouă în aplicația F# separată.
+
 F# își protejează copia tokenului prin DataProtection. Deconectarea în F# șterge credentialul
 și snapshotul local; revocă tokenul și aici pentru a invalida orice copie rămasă.
 

@@ -39,7 +39,11 @@ public class CreateSubscriptionDto : IValidatableObject
     }
 }
 
-public class UpdateSubscriptionDto : CreateSubscriptionDto { }
+public class UpdateSubscriptionDto : CreateSubscriptionDto
+{
+    // Optional for existing API clients. The web UI always sends the version it opened.
+    public DateTimeOffset? ExpectedUpdatedAt { get; set; }
+}
 
 public class SubscriptionStatusDto
 {

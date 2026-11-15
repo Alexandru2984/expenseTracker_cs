@@ -7,7 +7,7 @@ defineProps({
   pendingIds: { type: Set, default: () => new Set() }
 })
 
-const emit = defineEmits(['edit', 'delete', 'status', 'duplicate'])
+const emit = defineEmits(['edit', 'delete', 'status', 'duplicate', 'history'])
 
 const CATEGORY_COLORS = {
   Streaming: 'bg-pink-500/15 text-pink-600 dark:text-pink-300',
@@ -98,6 +98,7 @@ function dueInfo(sub) {
       </div>
 
       <!-- Actions -->
+      <button type="button" @click="emit('history', sub)" :aria-label="`Istoric preț ${sub.name}`" class="text-left text-xs font-semibold text-indigo-700 dark:text-indigo-300 py-2 hover:underline">Istoric preț →</button>
       <div class="flex flex-wrap gap-2">
         <button type="button" :disabled="pendingIds.has(sub.id)" @click="emit('status', sub)" :aria-label="`${sub.isActive ? 'Suspendă' : 'Reactivează'} ${sub.name}`" class="flex-1 text-xs font-semibold rounded-xl px-3 py-2.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 disabled:opacity-50">{{ sub.isActive ? 'Suspendă' : 'Reactivează' }}</button>
         <button type="button" :disabled="pendingIds.has(sub.id)" @click="emit('duplicate', sub)" :aria-label="`Duplică ${sub.name}`" class="flex-1 text-xs font-semibold rounded-xl px-3 py-2.5 text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 disabled:opacity-50">Duplică</button>

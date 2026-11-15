@@ -107,6 +107,7 @@ export const budgetsApi = {
 export const subscriptionsApi = {
   getAll: (params = {}) => api.get('/subscriptions', { params }),
   getById: (id) => api.get(`/subscriptions/${id}`),
+  priceHistory: (id, params = {}, signal) => api.get(`/subscriptions/${encodeURIComponent(id)}/price-history`, { params, signal }),
   create: (data) => api.post('/subscriptions', data),
   update: (id, data) => api.put(`/subscriptions/${id}`, data),
   remove: (id) => api.delete(`/subscriptions/${id}`),

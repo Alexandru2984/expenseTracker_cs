@@ -8,7 +8,7 @@ const root = path.join(deps, 'dist');
 const screenshotRoot = path.resolve(__dirname, '../.artifacts/screenshots');
 fs.mkdirSync(screenshotRoot, { recursive: true });
 function date(offset = 0) { const value = new Date(); value.setUTCDate(value.getUTCDate() + offset); return value.toISOString().slice(0, 10); }
-function item(id, name, extra = {}) { return { id, name, cost: 10, currency: 'EUR', billingPeriod: 'Monthly', nextBillingDate: date(2), category: 'SaaS', isActive: true, ...extra }; }
+function item(id, name, extra = {}) { return { id, name, cost: 10, currency: 'EUR', billingPeriod: 'Monthly', nextBillingDate: date(2), category: 'SaaS', isActive: true, updatedAt: '2026-11-01T10:00:00Z', ...extra }; }
 function month(offset) { const value = new Date(); value.setUTCDate(1); value.setUTCMonth(value.getUTCMonth() + offset); return value.toISOString().slice(0, 7); }
 (async () => {
  const server = http.createServer((request, response) => {
@@ -33,6 +33,10 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    let items = Array.from({ length: 13 }, (_, i) => item(`00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, i === 1 ? 'Alpha service' : i === 0 ? 'Long' + 'x'.repeat(96) : `Service ${i + 1}`, i === 12 ? { currency: 'XTS' } : {}));
    let account = { username: 'dashboard-fixture', email: 'fixture@example.invalid', emailVerified: true, createdAt: new Date().toISOString(), pendingEmail: null, pendingEmailExpiresAt: null, emailRetryAfterSeconds: 0 };
    let budgets = [], budgetRevision = 1;
+   let historyFailures = 1, staleUpdates = 0;
+   const priceChanges = Array.from({ length: 25 }, (_, i) => ({ id: `change-${i}`, changedAt: '2026-11-14T12:00:00Z',
+    previous: { cost: 10, currency: 'EUR', billingPeriod: 'Monthly' }, current: { cost: 12, currency: i === 1 ? 'USD' : 'EUR', billingPeriod: 'Monthly' },
+    monthlyDelta: i === 1 ? null : 2, changePercent: i === 1 ? null : 20 }));
    const budgetVersion = () => `11111111-1111-1111-1111-${String(budgetRevision).padStart(12, "0")}`;
    let posts = 0, slowDone; const slowFinished = new Promise(resolve => { slowDone = resolve; });
    let sessions = [{ id: 'current', isCurrent: true, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }, { id: 'other', isCurrent: false, createdAt: new Date(Date.now() - 86400000).toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }];
@@ -66,6 +70,16 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     else if (url.pathname === '/api/account/finance-tokens') data = { available: true, tokens: [] };
     else if (url.pathname === '/api/subscriptions/rates/status') data = { rates: { RON: 1, EUR: .2, USD: .22 }, source: 'live', fetchedAt: new Date().toISOString() };
     else if (url.pathname === '/api/subscriptions/summary') data = { byCurrency, activeSubscriptions: active.length, totalSubscriptions: items.length, dueThisWeek: active.length };
+    else if (/^\/api\/subscriptions\/[^/]+\/price-history$/.test(url.pathname)) {
+     const id = url.pathname.split('/').at(-2), sub = items.find(s => s.id === id);
+     const skip = Number(url.searchParams.get('skip') ?? 0), take = Number(url.searchParams.get('take') ?? 20);
+     if (historyFailures-- > 0) { status = 503; data = { title: 'Temporary history failure' }; }
+     else { const all = sub.name === 'Alpha service' ? priceChanges : []; data = { subscriptionId: id, current: { cost: sub.cost, currency: sub.currency, billingPeriod: sub.billingPeriod }, total: all.length, skip, take, entries: all.slice(skip, skip + take) }; }
+    }
+    else if (/^\/api\/subscriptions\/[^/]+$/.test(url.pathname) && request.method() === 'PUT') {
+     staleUpdates++; assert.equal(request.postDataJSON().expectedUpdatedAt, items[1].updatedAt);
+     status = 409; data = { detail: 'Abonamentul a fost modificat între timp. Redeschide versiunea actuală.' };
+    }
     else if (url.pathname === '/api/subscriptions/insights') data = {
      asOfDate: date(), activeCount: active.length, inactiveCount: items.length - active.length, overdueCount: 1,
      overdue: [{ ...items[0], date: date(-2) }], upcoming: active.slice(0, 12).map(s => ({ ...s, date: date(2) })),
@@ -99,6 +113,39 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
    const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Overflow at ${width}/${theme}`);
    await noOverflow(); checks++;
+   const historyButton = page.getByRole('button', { name: 'Istoric preț Alpha service', exact: true });
+   await historyButton.click();
+   const priceDialog = page.getByRole('dialog', { name: 'Istoric preț', exact: true });
+   await priceDialog.getByRole('alert').waitFor(); checks++;
+   await priceDialog.getByRole('button', { name: 'Reîncarcă istoricul', exact: true }).click();
+   await priceDialog.getByText('25 modificări înregistrate', { exact: true }).waitFor();
+   assert.equal(await priceDialog.getByRole('listitem').count(), 20); checks++;
+   assert.ok(await priceDialog.getByText('+2,00 EUR / lună echivalent · +20,00%', { exact: true }).first().isVisible()); checks++;
+   assert.ok(await priceDialog.getByText('Valută schimbată; variația nu se compară automat.', { exact: true }).isVisible()); checks++;
+   await priceDialog.getByRole('button', { name: 'Mai vechi', exact: true }).click();
+   await priceDialog.getByText('21–25 din 25', { exact: true }).waitFor();
+   assert.equal(await priceDialog.getByRole('listitem').count(), 5); checks++;
+   assert.ok(await priceDialog.getByRole('button', { name: 'Mai vechi', exact: true }).isDisabled()); checks++;
+   await priceDialog.getByRole('button', { name: 'Mai noi', exact: true }).click();
+   await priceDialog.getByText('1–20 din 25', { exact: true }).waitFor();
+   assert.ok(await priceDialog.getByRole('button', { name: 'Mai noi', exact: true }).isDisabled()); checks++;
+   await noOverflow(); checks++;
+   const historyAudit = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+   assert.deepEqual(historyAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), [], `History axe at ${width}/${theme}`); checks++;
+   await page.screenshot({ path: path.join(screenshotRoot, `price-history-${width}-${theme}.png`) });
+   await priceDialog.getByRole('button').last().focus(); await page.keyboard.press('Tab');
+   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Închide istoricul'); checks++;
+   await page.keyboard.press('Escape'); await priceDialog.waitFor({ state: 'detached' });
+   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Istoric preț Alpha service'); checks++;
+   await page.getByRole('button', { name: `Istoric preț ${items[0].name}`, exact: true }).click();
+   await priceDialog.getByText('Nu există încă modificări de preț înregistrate.', { exact: true }).waitFor(); checks++;
+   await page.getByRole('button', { name: 'Închide istoricul', exact: true }).click();
+   await page.getByRole('button', { name: 'Editează Alpha service', exact: true }).click();
+   await page.getByLabel('Cost', { exact: true }).fill('77');
+   await page.getByRole('button', { name: 'Salvează modificările', exact: true }).click();
+   await page.getByText('Abonamentul a fost modificat între timp. Redeschide versiunea actuală.', { exact: true }).waitFor();
+   assert.equal(staleUpdates, 1); assert.equal(await page.getByLabel('Cost', { exact: true }).inputValue(), '77'); checks++;
+   await page.getByRole('button', { name: 'Anulează', exact: true }).click();
    assert.ok(await page.getByText('Fără curs disponibil:', { exact: false }).isVisible()); checks++;
    await page.screenshot({ path: path.join(screenshotRoot, `dashboard-${width}-${theme}.png`), fullPage: true });
    const forecastButtons = page.getByRole('group', { name: 'Alege luna prognozei' }).getByRole('button');
@@ -229,6 +276,6 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
   await Promise.all([tabOne.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor(), tabTwo.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor()]);
   assert.equal(rotations, 1); checks++;
   await shared.close();
-  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including budgets, planning, pending email, cooldown, sessions, keyboard and WCAG`);
+  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including price history, stale edits, budgets, planning, pending email, cooldown, sessions, keyboard and WCAG`);
  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -227,8 +227,8 @@ try
     app.UseForwardedHeaders();
 
     // ── Security headers (defense in depth; applies to API responses) ─────────
-    // The static SPA (served by Nginx) additionally carries a CSP <meta> tag and
-    // should get frame-ancestors/HSTS from Nginx — see deploy.md.
+    // The static SPA gets a separate HTTP CSP with a per-response nonce from
+    // Nginx, including frame-ancestors/HSTS — see ops and deploy.md.
     app.Use(async (ctx, next) =>
     {
         var headers = ctx.Response.Headers;
