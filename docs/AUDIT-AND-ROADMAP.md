@@ -94,3 +94,11 @@ exploatare din acest audit. Acest lucru nu dovedește absența exploatării isto
 o investigație a jurnalelor și revocarea sesiunilor existente rămân acțiuni distincte.
 Pe baza de producție verificată la prima lansare erau zero conturi și abonamente;
 testele au folosit exclusiv conturi sintetice în baze temporare.
+
+- Etapa 3: DTO-uri comune pentru creare/editare/import, normalizare valută și spații,
+  cost cu maximum două zecimale, enum-uri definite, dată obligatorie, caractere de
+  control respinse. CSV cu ghilimele valide, limite explicite de rânduri/coloane,
+  antete duplicate respinse, BOM acceptat și raport `imported/skipped/rejected` cu
+  primele 10 erori. Valorile invalide nu sunt ajustate automat. Crearea respectă
+  IsActive; DueThisWeek nu mai include restanțele. Protecția la formule CSV acoperă
+  și newline sau whitespace înaintea formulei.

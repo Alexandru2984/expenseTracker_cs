@@ -3,7 +3,7 @@ using ExpenseTracker.Api.Models;
 
 namespace ExpenseTracker.Api.Dtos;
 
-public class CreateSubscriptionDto
+public class CreateSubscriptionDto : IValidatableObject
 {
     [Required]
     [StringLength(100, MinimumLength = 1)]
@@ -14,30 +14,10 @@ public class CreateSubscriptionDto
 
     [Required]
     [StringLength(10, MinimumLength = 1)]
+    [RegularExpression("^[A-Za-z]{3}$", ErrorMessage = "Valuta trebuie să aibă trei litere (RON, EUR, USD…).")]
     public string Currency { get; set; } = "RON";
 
-    public BillingPeriod BillingPeriod { get; set; } = BillingPeriod.Monthly;
-
-    [Required]
-    public DateOnly NextBillingDate { get; set; }
-
-    [StringLength(100)]
-    public string Category { get; set; } = string.Empty;
-}
-
-public class UpdateSubscriptionDto
-{
-    [Required]
-    [StringLength(100, MinimumLength = 1)]
-    public string Name { get; set; } = string.Empty;
-
-    [Range(0, 1_000_000)]
-    public decimal Cost { get; set; }
-
-    [Required]
-    [StringLength(10, MinimumLength = 1)]
-    public string Currency { get; set; } = "RON";
-
+    [EnumDataType(typeof(BillingPeriod))]
     public BillingPeriod BillingPeriod { get; set; } = BillingPeriod.Monthly;
 
     [Required]
@@ -47,7 +27,19 @@ public class UpdateSubscriptionDto
     public string Category { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (NextBillingDate.Year < 1900 || NextBillingDate.Year > 9998)
+            yield return new ValidationResult("Data scadentă este obligatorie (anii 1900–9998).", [nameof(NextBillingDate)]);
+        if (decimal.Round(Cost, 2) != Cost)
+            yield return new ValidationResult("Costul poate avea maximum două zecimale.", [nameof(Cost)]);
+        if ((Name?.Any(char.IsControl) ?? false) || (Category?.Any(char.IsControl) ?? false))
+            yield return new ValidationResult("Numele și categoria nu pot conține caractere de control.", [nameof(Name), nameof(Category)]);
+    }
 }
+
+public class UpdateSubscriptionDto : CreateSubscriptionDto { }
 
 public class SubscriptionResponseDto
 {

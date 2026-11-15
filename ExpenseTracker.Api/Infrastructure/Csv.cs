@@ -13,17 +13,33 @@ public static class Csv
     public static string Field(string? value)
     {
         value ??= string.Empty;
-        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+        if (value.Length > 0 && (char.IsControl(value[0]) || value.TrimStart().FirstOrDefault() is '=' or '+' or '-' or '@'))
             value = "'" + value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
-    public static List<List<string>> Parse(string content)
+    public static List<List<string>> Parse(string content, int maxRows = 5001, int maxColumns = 32)
     {
         var rows = new List<List<string>>();
         var field = new System.Text.StringBuilder();
         var row = new List<string>();
         var inQuotes = false;
+        var closedQuote = false;
+
+        void AddField()
+        {
+            row.Add(field.ToString());
+            field.Clear();
+            closedQuote = false;
+            if (row.Count > maxColumns) throw new FormatException($"Maximum {maxColumns} coloane CSV.");
+        }
+        void AddRow()
+        {
+            AddField();
+            if (row.Count > 1 || !string.IsNullOrWhiteSpace(row[0])) rows.Add(row);
+            if (rows.Count > maxRows) throw new FormatException($"Maximum {maxRows - 1} rânduri de date CSV.");
+            row = new List<string>();
+        }
 
         for (int i = 0; i < content.Length; i++)
         {
@@ -34,28 +50,30 @@ public static class Csv
                 if (c == '"')
                 {
                     if (i + 1 < content.Length && content[i + 1] == '"') { field.Append('"'); i++; }
-                    else inQuotes = false;
+                    else { inQuotes = false; closedQuote = true; }
                 }
                 else field.Append(c);
                 continue;
             }
 
+            if (closedQuote && c is not (',' or '\r' or '\n'))
+                throw new FormatException("Caractere neașteptate după un câmp CSV între ghilimele.");
+
             switch (c)
             {
                 case '"':
+                    if (field.Length != 0) throw new FormatException("Ghilimele CSV într-un câmp neîncadrat.");
                     inQuotes = true;
                     break;
                 case ',':
-                    row.Add(field.ToString());
-                    field.Clear();
+                    AddField();
                     break;
                 case '\r':
+                    if (i + 1 < content.Length && content[i + 1] == '\n') i++;
+                    AddRow();
                     break;
                 case '\n':
-                    row.Add(field.ToString());
-                    field.Clear();
-                    rows.Add(row);
-                    row = new List<string>();
+                    AddRow();
                     break;
                 default:
                     field.Append(c);
@@ -64,11 +82,8 @@ public static class Csv
         }
 
         // trailing field/row (no final newline)
-        if (field.Length > 0 || row.Count > 0)
-        {
-            row.Add(field.ToString());
-            rows.Add(row);
-        }
+        if (inQuotes) throw new FormatException("Câmp CSV cu ghilimele neînchise.");
+        if (field.Length > 0 || row.Count > 0 || closedQuote) AddRow();
 
         // drop fully-empty rows
         rows.RemoveAll(r => r.Count == 1 && string.IsNullOrWhiteSpace(r[0]));

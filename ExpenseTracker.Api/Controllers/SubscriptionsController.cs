@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
@@ -136,11 +137,18 @@ public class SubscriptionsController : ControllerBase
         using (var reader = new StreamReader(file.OpenReadStream()))
             content = await reader.ReadToEndAsync();
 
-        var rows = Csv.Parse(content);
+        List<List<string>> rows;
+        try { rows = Csv.Parse(content); }
+        catch (FormatException ex)
+        {
+            return BadRequest(new ProblemDetails { Title = "CSV invalid.", Detail = ex.Message });
+        }
         if (rows.Count == 0)
             return BadRequest(new ProblemDetails { Title = "CSV gol." });
 
-        var header = rows[0].Select(h => h.Trim().ToLowerInvariant()).ToList();
+        var header = rows[0].Select(h => h.Trim().TrimStart('\uFEFF').ToLowerInvariant()).ToList();
+        if (header.Distinct().Count() != header.Count)
+            return BadRequest(new ProblemDetails { Title = "Antet CSV cu coloane duplicate." });
         int Col(string name) => header.IndexOf(name);
         int iName = Col("name"), iCost = Col("cost"), iCur = Col("currency"),
             iPeriod = Col("billingperiod"), iDate = Col("nextbillingdate"),
@@ -160,50 +168,43 @@ public class SubscriptionsController : ControllerBase
             .Select(n => n.ToLowerInvariant())
             .ToHashSet();
 
-        int imported = 0, skipped = 0;
+        int imported = 0, skipped = 0, rejected = 0;
         var errors = new List<string>();
-        const int maxRows = 5000;
-
-        for (int r = 1; r < rows.Count && r <= maxRows; r++)
+        for (int r = 1; r < rows.Count; r++)
         {
             var row = rows[r];
             string Get(int idx) => idx >= 0 && idx < row.Count ? row[idx].Trim() : "";
 
             var name = Get(iName);
-            if (string.IsNullOrWhiteSpace(name)) { errors.Add($"Rândul {r + 1}: nume lipsă."); continue; }
-            if (name.Length > 100) name = name[..100];
-
-            if (existing.Contains(name.ToLowerInvariant())) { skipped++; continue; }
-
-            if (!decimal.TryParse(Get(iCost), NumberStyles.Any, CultureInfo.InvariantCulture, out var cost))
-            { errors.Add($"Rândul {r + 1}: cost invalid."); continue; }
-            cost = Math.Clamp(cost, 0m, 1_000_000m);
-
-            if (!DateOnly.TryParse(Get(iDate), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            { errors.Add($"Rândul {r + 1}: dată invalidă (folosește YYYY-MM-DD)."); continue; }
-
-            var currency = iCur >= 0 ? Get(iCur).ToUpperInvariant() : "RON";
-            if (string.IsNullOrWhiteSpace(currency)) currency = "RON";
-            if (currency.Length > 10) currency = currency[..10];
-
+            void Reject(string message) { rejected++; if (errors.Count < 10) errors.Add($"Rândul {r + 1}: {message}"); }
+            if (!decimal.TryParse(Get(iCost), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture, out var cost))
+            { Reject("cost invalid (separator zecimal: punct)."); continue; }
+            if (!DateOnly.TryParseExact(Get(iDate), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            { Reject("dată invalidă (folosește YYYY-MM-DD)."); continue; }
             var period = BillingPeriod.Monthly;
-            if (iPeriod >= 0) Enum.TryParse(Get(iPeriod), ignoreCase: true, out period);
-
-            var category = iCat >= 0 ? Get(iCat) : "";
-            if (category.Length > 100) category = category[..100];
-
+            if (iPeriod >= 0 && (!Enum.TryParse(Get(iPeriod), true, out period) || !Enum.IsDefined(period)))
+            { Reject("frecvență invalidă (Monthly sau Yearly)."); continue; }
             var isActive = true;
-            if (iActive >= 0 && bool.TryParse(Get(iActive), out var parsedActive)) isActive = parsedActive;
+            if (iActive >= 0 && !bool.TryParse(Get(iActive), out isActive))
+            { Reject("IsActive trebuie să fie true sau false."); continue; }
+            var dto = new CreateSubscriptionDto { Name = name, Cost = cost,
+                Currency = iCur >= 0 ? Get(iCur).ToUpperInvariant() : "RON", BillingPeriod = period,
+                NextBillingDate = date, Category = iCat >= 0 ? Get(iCat) : "", IsActive = isActive };
+            var validation = new List<ValidationResult>();
+            if (!Validator.TryValidateObject(dto, new ValidationContext(dto), validation, true))
+            { Reject(string.Join(" ", validation.Select(v => v.ErrorMessage))); continue; }
+            if (existing.Contains(name.ToLowerInvariant())) { skipped++; continue; }
 
             _db.Subscriptions.Add(new SubscriptionItem
             {
                 Id = Guid.NewGuid(),
                 Name = name,
                 Cost = cost,
-                Currency = currency,
+                Currency = dto.Currency,
                 BillingPeriod = period,
                 NextBillingDate = date,
-                Category = category,
+                Category = dto.Category,
                 IsActive = isActive,
                 UserId = userId
             });
@@ -213,7 +214,7 @@ public class SubscriptionsController : ControllerBase
 
         if (imported > 0) await _db.SaveChangesAsync();
 
-        return Ok(new { imported, skipped, errors = errors.Take(10) });
+        return Ok(new { imported, skipped, rejected, errors });
     }
 
     // GET /api/subscriptions/{id}
@@ -233,13 +234,13 @@ public class SubscriptionsController : ControllerBase
         var item = new SubscriptionItem
         {
             Id = Guid.NewGuid(),
-            Name = dto.Name,
+            Name = dto.Name.Trim(),
             Cost = dto.Cost,
-            Currency = dto.Currency,
+            Currency = dto.Currency.Trim().ToUpperInvariant(),
             BillingPeriod = dto.BillingPeriod,
             NextBillingDate = dto.NextBillingDate,
-            Category = dto.Category,
-            IsActive = true,
+            Category = dto.Category?.Trim() ?? "",
+            IsActive = dto.IsActive,
             UserId = GetUserId()
         };
 
@@ -256,12 +257,12 @@ public class SubscriptionsController : ControllerBase
         var existing = await _db.Subscriptions.FindAsync(id);
         if (existing is null || existing.UserId != GetUserId()) return NotFound();
 
-        existing.Name = dto.Name;
+        existing.Name = dto.Name.Trim();
         existing.Cost = dto.Cost;
-        existing.Currency = dto.Currency;
+        existing.Currency = dto.Currency.Trim().ToUpperInvariant();
         existing.BillingPeriod = dto.BillingPeriod;
         existing.NextBillingDate = dto.NextBillingDate;
-        existing.Category = dto.Category;
+        existing.Category = dto.Category?.Trim() ?? "";
         existing.IsActive = dto.IsActive;
 
         await _db.SaveChangesAsync();
@@ -306,7 +307,7 @@ public class SubscriptionsController : ControllerBase
             .OrderBy(x => x.Currency);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var dueThisWeek = active.Count(s => s.NextBillingDate <= today.AddDays(7));
+        var dueThisWeek = active.Count(s => s.NextBillingDate >= today && s.NextBillingDate <= today.AddDays(7));
 
         return Ok(new SummaryResponseDto
         {
