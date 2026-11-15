@@ -194,3 +194,33 @@ no-store, iar asseturile cu nume hashuit au cache immutable separat. Politica AP
 rămâne default-src none. Nu se adaugă unsafe-inline în script-src și nu se schimbă
 regulile Bot Fight Mode ale zonei. Referință:
 [Cloudflare JavaScript Detections și CSP](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/).
+
+## Lansare finală verificată
+
+Cod activ: `9b6e954`, imagine
+`expensetracker_cs-api:release-9b6e95490effbc4e1030cf49bfe0e1b3f6d8836b`.
+Backup și rollback private:
+`/var/backups/expense-tracker/deploy-20261115T133837Z`. Restore drill trecut înainte
+de activare. Nicio migrație, niciun restart PostgreSQL; API healthy, zero restarturi.
+`ops/nginx-expenses.conf` reflectă configurația aplicată.
+
+Verificări publice: health 200; insights/calendar/sessions/export Finance anonime
+401, cu no-store și un singur set de headere de protecție. Snapshot Finance accesibil
+prin .NET HttpClient până la verificarea autorizării (401 fără token), fără schimbarea
+contractului. Pagina publică în Chromium la 390 px: fără overflow, erori JavaScript
+sau erori CSP după rezolvarea nonce-ului Cloudflare. Nonce diferit pentru două
+cereri HTML, HTML no-store și asseturi hash-uite public/immutable. Sitemap public
+conține numai pagina publică a domeniului corect.
+
+**Propagare CDN încă în curs:** `/robots.txt` fără query este încă un HIT Cloudflare
+al variantei vechi, cu TTL 14400 secunde. Originul și o cerere nouă cu query de
+release furnizează deja regulile corecte. Cache-ul existent necesită expirare sau
+purge în contul Cloudflare; nu s-a găsit un conector Cloudflare disponibil pentru
+această operație și nu s-au folosit credențiale din alte servicii ale VPS-ului.
+Regulile Bot Fight Mode nu au fost dezactivate pentru a trece probele automate.
+Unele cliente automate (de exemplu urllib cu setările implicite) primesc 403 la
+edge; curl, browserul și proba .NET au primit răspunsurile așteptate.
+
+Cele 157 verificări UI și cele 93 teste backend sunt pentru scenariile din suite,
+nu o garanție de absență a tuturor defectelor. CI rămâne de executat și pe GitHub
+după publicarea commiturilor. Lista prioritizată de mai sus rămâne planul următor.
