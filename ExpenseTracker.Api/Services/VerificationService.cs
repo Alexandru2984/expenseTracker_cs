@@ -17,11 +17,13 @@ public class VerificationService
 
     private readonly AppDbContext _db;
     private readonly EmailService _email;
+    private readonly AuthTokenService _tokens;
 
-    public VerificationService(AppDbContext db, EmailService email)
+    public VerificationService(AppDbContext db, EmailService email, AuthTokenService tokens)
     {
         _db = db;
         _email = email;
+        _tokens = tokens;
     }
 
     // Save with the caller's credential update to invalidate codes for old credentials.
@@ -45,7 +47,7 @@ public class VerificationService
         {
             UserId = user.Id,
             Purpose = purpose,
-            CodeHash = AuthTokenService.Hash(code),
+            CodeHash = _tokens.HashVerificationCode(user, purpose, code),
             ExpiresAt = DateTime.UtcNow.AddMinutes(TtlMinutes)
         });
         await _db.SaveChangesAsync();
@@ -75,7 +77,7 @@ public class VerificationService
 
         var ok = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(entry.CodeHash),
-            Encoding.UTF8.GetBytes(AuthTokenService.Hash(code)));
+            Encoding.UTF8.GetBytes(_tokens.HashVerificationCode(user, purpose, code)));
 
         if (ok) entry.ConsumedAt = DateTime.UtcNow;
         try

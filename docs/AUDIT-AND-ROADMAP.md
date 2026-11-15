@@ -136,3 +136,26 @@ Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).
   fără arhivă incompletă și fără mesaj fals de succes. Backupurile noi includ
   clean/if-exists; un backup vechi fără aceste instrucțiuni poate necesita o bază
   goală și va eșua sigur dacă obiectele există deja.
+
+- Coduri și credențiale: codurile numerice sunt acum protejate cu HMAC, legat de
+  cont, adresă și scop; hashul SHA-256 simplu al unui cod cu doar un milion de
+  posibilități permitea ghicire offline în cazul unei scurgeri a bazei. Codurile
+  vechi trebuie retrimise după lansare (nu sunt acceptate prin fallback). Verificarea
+  BCrypt respinge parole care depășesc 72 de octeți UTF-8, inclusiv la login și
+  reautentificare. Inputurile auth sunt limitate și codurile acceptă numai cifre.
+  Emailul, verificarea și parola au protecție la modificări concurente pe coloane
+  existente; un conflict returnează 409 fără detalii interne. 92 teste backend trecute.
+
+## Puncte deschise după această rundă
+
+- Cooldown persistent pe cont pentru emailuri și apărare la brute force distribuit;
+  limitele curente sunt pe IP, iar verificarea codului are maximum 5 încercări.
+- Email nou în așteptare, fără înlocuirea adresei curente înainte de confirmare;
+  actualul flux cere parola, revocă sesiunile și invalidează codurile vechi.
+- Index unic pentru username normalizat, pentru a elimina și cursa între
+  înregistrări cu diferențe de majuscule; schimbarea necesită migrație controlată.
+- MFA/passkeys, audit de acces cu retenție explicită și recuperare cont.
+- Alinierea headerelor nginx/API duplicate; CSP/frame-ancestors blochează deja
+  încadrarea, dar X-Frame-Options și Referrer-Policy au valori duplicate diferite.
+- Backup off-site criptat și probă periodică de restaurare, verificarea alertelor
+  SMTP, quotas și SLO; probele din această rundă nu înlocuiesc operarea continuă.

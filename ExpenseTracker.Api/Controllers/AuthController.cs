@@ -44,7 +44,7 @@ public class AuthController : ControllerBase
             return BadRequest(new ProblemDetails
             {
                 Title = "Parolă invalidă.",
-                Detail = "Parola este prea lungă (maxim 72 de caractere)."
+                Detail = "Parola depășește limita de 72 de octeți UTF-8."
             });
 
         var trimmedUsername = dto.Username.Trim();
@@ -95,7 +95,7 @@ public class AuthController : ControllerBase
         var user = await _db.Users
             .FirstOrDefaultAsync(u => u.Username.ToLower() == loweredUsername);
 
-        if (user is null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+        if (user is null || !PasswordRules.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new ProblemDetails
             {
                 Title = "Autentificare eșuată.",
@@ -173,7 +173,7 @@ public class AuthController : ControllerBase
             return BadRequest(new ProblemDetails
             {
                 Title = "Parolă invalidă.",
-                Detail = "Parola este prea lungă (maxim 72 de caractere)."
+                Detail = "Parola depășește limita de 72 de octeți UTF-8."
             });
 
         var email = dto.Email.Trim().ToLowerInvariant();

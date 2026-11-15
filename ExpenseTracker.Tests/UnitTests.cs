@@ -85,6 +85,29 @@ public class AuthTokenServiceTests
         var (token, _) = Svc().CreateAccessToken(new User { Id = Guid.NewGuid(), Username = "u" }, Guid.NewGuid());
         Assert.Equal(3, token.Split('.').Length);
     }
+
+    [Fact]
+    public void Verification_code_MAC_is_bound_to_account_inbox_and_purpose()
+    {
+        var service = Svc();
+        var user = new User { Email = "original@example.invalid" };
+        var hash = service.HashVerificationCode(user, VerificationPurpose.EmailVerification, "123456");
+        Assert.StartsWith("v2:", hash);
+        Assert.NotEqual(hash, AuthTokenService.Hash("123456"));
+        Assert.NotEqual(hash, service.HashVerificationCode(user, VerificationPurpose.PasswordReset, "123456"));
+        Assert.NotEqual(hash, service.HashVerificationCode(new User { Email=user.Email }, VerificationPurpose.EmailVerification, "123456"));
+        user.Email = "new@example.invalid";
+        Assert.NotEqual(hash, service.HashVerificationCode(user, VerificationPurpose.EmailVerification, "123456"));
+    }
+
+    [Fact]
+    public void Password_verification_enforces_BCrypt_limit_by_UTF8_bytes()
+    {
+        var password = new string('é', 36); // 72 UTF-8 bytes
+        var hash = BCrypt.Net.BCrypt.HashPassword(password);
+        Assert.True(PasswordRules.Verify(password, hash));
+        Assert.False(PasswordRules.Verify(password + "é", hash));
+    }
 }
 
 public class ClientIpTests

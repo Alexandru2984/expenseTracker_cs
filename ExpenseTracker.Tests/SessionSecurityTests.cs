@@ -63,7 +63,7 @@ public class SessionSecurityTests(TestApiFactory factory)
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             db.VerificationCodes.Add(new VerificationCode { UserId = user.Id, Purpose = VerificationPurpose.PasswordReset,
-                CodeHash = AuthTokenService.Hash("123456"), ExpiresAt = DateTime.UtcNow.AddMinutes(10) });
+                CodeHash = scope.ServiceProvider.GetRequiredService<AuthTokenService>().HashVerificationCode(user, VerificationPurpose.PasswordReset, "123456"), ExpiresAt = DateTime.UtcNow.AddMinutes(10) });
             await db.SaveChangesAsync();
         }
         var response = await client.PostAsJsonAsync("/api/account/change-password",
@@ -88,7 +88,7 @@ public class SessionSecurityTests(TestApiFactory factory)
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.VerificationCodes.Add(new VerificationCode { UserId = user.Id, CodeHash = AuthTokenService.Hash("123456"), ExpiresAt = DateTime.UtcNow.AddMinutes(10) });
+            db.VerificationCodes.Add(new VerificationCode { UserId = user.Id, CodeHash = scope.ServiceProvider.GetRequiredService<AuthTokenService>().HashVerificationCode(user, VerificationPurpose.EmailVerification, "123456"), ExpiresAt = DateTime.UtcNow.AddMinutes(10) });
             await db.SaveChangesAsync();
         }
         (await client.PostAsJsonAsync("/api/account/change-email", new { email, currentPassword = Password })).EnsureSuccessStatusCode();
@@ -96,7 +96,7 @@ public class SessionSecurityTests(TestApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/account")).StatusCode);
         using var check = factory.Services.CreateScope();
         var oldCode = await check.ServiceProvider.GetRequiredService<AppDbContext>().VerificationCodes
-            .SingleAsync(c => c.UserId == user.Id && c.CodeHash == AuthTokenService.Hash("123456"));
+            .SingleAsync(c => c.UserId == user.Id && c.ConsumedAt != null);
         Assert.NotNull(oldCode.ConsumedAt);
     }
 
@@ -137,5 +137,37 @@ public class SessionSecurityTests(TestApiFactory factory)
         await first.SaveChangesAsync();
         b.RevokedAt = DateTime.UtcNow;
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Oversized_passwords_do_not_throw_or_authenticate_by_truncation()
+    {
+        var (_, _, user) = await Login();
+        using var anonymous = factory.CreateClient();
+        foreach (var password in new[] { new string('a', 100), new string('é', 50) })
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await anonymous.PostAsJsonAsync("/api/auth/login", new { user.Username, password })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Stale_email_verification_cannot_overwrite_a_concurrent_inbox_change()
+    {
+        var (_, _, user) = await Login();
+        using (var seedScope = factory.Services.CreateScope())
+        {
+            var seed = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            (await seed.Users.FindAsync(user.Id))!.EmailVerified = false;
+            await seed.SaveChangesAsync();
+        }
+        using var firstScope = factory.Services.CreateScope();
+        using var secondScope = factory.Services.CreateScope();
+        var first = firstScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var second = secondScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var verifying = (await first.Users.FindAsync(user.Id))!;
+        var changing = (await second.Users.FindAsync(user.Id))!;
+        changing.Email = Guid.NewGuid().ToString("N") + "@example.invalid";
+        await second.SaveChangesAsync();
+        verifying.EmailVerified = true;
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => first.SaveChangesAsync());
     }
 }

@@ -81,13 +81,13 @@ public class AccountController : ControllerBase
             return BadRequest(new ProblemDetails
             {
                 Title = "Parolă invalidă.",
-                Detail = "Parola este prea lungă (maxim 72 de caractere)."
+                Detail = "Parola depășește limita de 72 de octeți UTF-8."
             });
 
         var user = await _db.Users.FindAsync(GetUserId());
         if (user is null) return Unauthorized();
 
-        if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+        if (!PasswordRules.Verify(dto.CurrentPassword, user.PasswordHash))
             return BadRequest(new ProblemDetails
             {
                 Title = "Parolă greșită.",
@@ -114,7 +114,7 @@ public class AccountController : ControllerBase
         if (user is null) return Unauthorized();
 
         var email = dto.Email.Trim().ToLowerInvariant();
-        if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+        if (!PasswordRules.Verify(dto.CurrentPassword, user.PasswordHash))
             return BadRequest(new ProblemDetails { Title = "Parola curentă este incorectă." });
         if (email == user.Email)
             return BadRequest(new ProblemDetails { Title = "Introdu o adresă de email diferită." });

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using ExpenseTracker.Api.Data;
 using ExpenseTracker.Api.Integrations;
 using ExpenseTracker.Api.Models;
+using ExpenseTracker.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -34,7 +35,7 @@ public sealed class FinanceTokensController(AppDbContext db, IConfiguration conf
         if (!Enabled) return NotFound();
         var user = await db.Users.FindAsync(new object[] { UserId }, ct);
         if (user is null) return Unauthorized();
-        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+        if (!PasswordRules.Verify(request.CurrentPassword, user.PasswordHash))
             return BadRequest(new ProblemDetails { Title = "Parola curentă este incorectă." });
         var now = DateTime.UtcNow;
         var count = await db.RefreshTokens.CountAsync(t => t.UserId == UserId

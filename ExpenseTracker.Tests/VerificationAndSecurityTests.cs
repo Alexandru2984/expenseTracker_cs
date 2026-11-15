@@ -17,11 +17,14 @@ public class VerificationServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
+    private static IConfiguration Configuration() => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    { ["Jwt:Secret"] = "verification-test-secret-at-least-32-chars" }).Build();
+
     private static VerificationService Svc(AppDbContext db)
     {
         var email = new EmailService(new ConfigurationBuilder().Build(),
             NullLogger<EmailService>.Instance);
-        return new VerificationService(db, email);
+        return new VerificationService(db, email, new AuthTokenService(Configuration()));
     }
 
     private static async Task<User> SeedUser(AppDbContext db)
@@ -40,7 +43,7 @@ public class VerificationServiceTests
         {
             UserId = userId,
             Purpose = purpose,
-            CodeHash = AuthTokenService.Hash(plaintext),
+            CodeHash = new AuthTokenService(Configuration()).HashVerificationCode((await db.Users.FindAsync(userId))!, purpose, plaintext),
             ExpiresAt = DateTime.UtcNow.AddMinutes(ttlMinutes)
         });
         await db.SaveChangesAsync();

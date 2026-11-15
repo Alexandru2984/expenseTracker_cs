@@ -76,7 +76,10 @@ public class AppDbContext : DbContext
                   .IsUnique();
 
             entity.Property(e => e.Email)
+                  .IsConcurrencyToken()
                   .HasMaxLength(256);
+
+            entity.Property(e => e.EmailVerified).IsConcurrencyToken();
 
             // Unique per-email; PostgreSQL treats NULLs as distinct, so legacy
             // accounts without an email don't collide.
@@ -84,6 +87,7 @@ public class AppDbContext : DbContext
                   .IsUnique();
 
             entity.Property(e => e.PasswordHash)
+                  .IsConcurrencyToken()
                   .IsRequired();
         });
 

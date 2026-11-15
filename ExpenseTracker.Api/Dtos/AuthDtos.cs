@@ -21,16 +21,19 @@ public class RegisterDto
 public class VerifyEmailDto
 {
     [Required]
+    [StringLength(50)]
     public string Username { get; set; } = string.Empty;
 
     [Required]
     [StringLength(6, MinimumLength = 6)]
+    [RegularExpression("^[0-9]{6}$")]
     public string Code { get; set; } = string.Empty;
 }
 
 public class ResendCodeDto
 {
     [Required]
+    [StringLength(50)]
     public string Username { get; set; } = string.Empty;
 }
 
@@ -38,6 +41,7 @@ public class ForgotPasswordDto
 {
     [Required]
     [EmailAddress]
+    [StringLength(256)]
     public string Email { get; set; } = string.Empty;
 }
 
@@ -45,10 +49,12 @@ public class ResetPasswordDto
 {
     [Required]
     [EmailAddress]
+    [StringLength(256)]
     public string Email { get; set; } = string.Empty;
 
     [Required]
     [StringLength(6, MinimumLength = 6)]
+    [RegularExpression("^[0-9]{6}$")]
     public string Code { get; set; } = string.Empty;
 
     [Required]
@@ -59,9 +65,11 @@ public class ResetPasswordDto
 public class LoginDto
 {
     [Required]
+    [StringLength(50)]
     public string Username { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(128)]
     public string Password { get; set; } = string.Empty;
 }
 

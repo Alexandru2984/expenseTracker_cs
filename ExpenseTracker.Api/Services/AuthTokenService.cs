@@ -70,6 +70,12 @@ public class AuthTokenService
         Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!),
         Encoding.UTF8.GetBytes($"{user.PasswordHash}\n{user.Email}\n{user.EmailVerified}")));
 
+    // Numeric codes have only a million possibilities. A server-keyed MAC keeps
+    // a database-only disclosure from enabling an offline dictionary attack.
+    public string HashVerificationCode(User user, VerificationPurpose purpose, string code) =>
+        "v2:" + Convert.ToBase64String(HMACSHA256.HashData(Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!),
+            Encoding.UTF8.GetBytes($"verification:{user.Id:D}:{purpose}:{user.Email}:{code}")));
+
     public static string CreateCsrfToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 

@@ -253,14 +253,15 @@ try
         {
             var feature = ctx.Features.Get<IExceptionHandlerFeature>();
             var isDev = app.Environment.IsDevelopment();
+            var isConflict = feature?.Error is DbUpdateConcurrencyException;
 
-            ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            ctx.Response.StatusCode = isConflict ? StatusCodes.Status409Conflict : StatusCodes.Status500InternalServerError;
             ctx.Response.ContentType = "application/problem+json";
 
             var pd = new ProblemDetails
             {
-                Status = 500,
-                Title = "An unexpected error occurred.",
+                Status = ctx.Response.StatusCode,
+                Title = isConflict ? "Datele au fost modificate între timp. Reîncearcă operația." : "An unexpected error occurred.",
                 Detail = isDev ? feature?.Error.ToString() : null
             };
 

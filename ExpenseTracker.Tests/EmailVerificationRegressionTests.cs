@@ -26,7 +26,7 @@ public class EmailVerificationRegressionTests(TestApiFactory factory)
         db.VerificationCodes.Add(new VerificationCode
         {
             UserId = user.Id,
-            CodeHash = AuthTokenService.Hash("123456"),
+            CodeHash = scope.ServiceProvider.GetRequiredService<AuthTokenService>().HashVerificationCode(user, VerificationPurpose.EmailVerification, "123456"),
             ExpiresAt = DateTime.UtcNow.AddMinutes(expired ? -1 : 15)
         });
         await db.SaveChangesAsync();
