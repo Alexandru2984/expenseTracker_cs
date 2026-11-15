@@ -97,6 +97,13 @@ export const financeIntegrationApi = {
   revoke: (id) => api.delete(`/account/finance-tokens/${encodeURIComponent(id)}`)
 }
 
+export const budgetsApi = {
+  list: () => api.get('/budgets'),
+  create: (data) => api.post('/budgets', data),
+  update: (id, data) => api.put(`/budgets/${encodeURIComponent(id)}`, data),
+  remove: (id, version) => api.delete(`/budgets/${encodeURIComponent(id)}`, { params: { version } })
+}
+
 export const subscriptionsApi = {
   getAll: (params = {}) => api.get('/subscriptions', { params }),
   getById: (id) => api.get(`/subscriptions/${id}`),

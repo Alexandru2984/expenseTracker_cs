@@ -30,6 +30,8 @@ Funcționalități principale:
 - Temă luminoasă/întunecată, responsive mobile-first, instalabilă ca PWA (offline app shell)
 - Prognoză pe 6 luni, calendar al plăților, export .ics și simulator de economii
 - Suspendare/reactivare, duplicare prin formular și gestionarea sesiunilor active
+- Bugete lunare persistente pe valută/categorie, prag depășit și editare cu versiuni
+- Schimbare email cu confirmare înainte de înlocuirea adresei și cooldown pe cont
 - Grafice pe întregul cont și sursa cursului valutar afișată explicit
 
 ---
@@ -156,6 +158,10 @@ necesită header `X-CSRF-Token` egal cu cookie-ul `csrf_token` (double-submit). 
 | `GET` | `/api/subscriptions/calendar` | Export ICS al următoarelor scadențe salvate |
 | `POST` | `/api/subscriptions/{id}/status` | Suspendare/reactivare (`{ isActive: false/true }`) |
 | `GET` / `DELETE` | `/api/account/sessions[/{id}]` | Listare/revocare sesiuni proprii |
+| `GET` / `POST` | `/api/budgets` | Listare și creare bugete proprii |
+| `PUT` / `DELETE` | `/api/budgets/{id}` | Editare/ștergere cu versiunea curentă |
+| `POST` | `/api/account/confirm-email-change` | Confirmarea noii adrese |
+| `DELETE` | `/api/account/pending-email` | Anularea schimbării emailului |
 
 ---
 
@@ -207,6 +213,8 @@ token-urilor, rezolvarea IP-ului real, izolarea pe utilizator (ownership) și fl
 ## Audit și plan de produs
 
 [Constatări, remedieri verificate și etapele următoare](docs/AUDIT-AND-ROADMAP.md).
+
+Detalii: [securitatea conturilor](docs/ACCOUNT-SECURITY.md) și [bugete lunare](docs/BUDGETS.md).
 
 ## Conectare cu Finance F#
 

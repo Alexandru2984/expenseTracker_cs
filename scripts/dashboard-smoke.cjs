@@ -23,13 +23,17 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const browser = await chromium.launch({ headless: true }); let checks = 0;
  try {
-  for (const width of [1440, 390, 320]) for (const theme of ['light', 'dark']) {
+  const widths = (process.env.EXPENSE_UI_WIDTHS ?? '1440,390,320').split(',').map(Number);
+  const themes = (process.env.EXPENSE_UI_THEMES ?? 'light,dark').split(',');
+  for (const width of widths) for (const theme of themes) {
    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
    await context.addInitScript(value => localStorage.setItem('theme', value), theme);
    const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
    await page.route('https://analytics.micutu.com/**', route => route.abort());
    let items = Array.from({ length: 13 }, (_, i) => item(`00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, i === 1 ? 'Alpha service' : i === 0 ? 'Long' + 'x'.repeat(96) : `Service ${i + 1}`, i === 12 ? { currency: 'XTS' } : {}));
    let account = { username: 'dashboard-fixture', email: 'fixture@example.invalid', emailVerified: true, createdAt: new Date().toISOString(), pendingEmail: null, pendingEmailExpiresAt: null, emailRetryAfterSeconds: 0 };
+   let budgets = [], budgetRevision = 1;
+   const budgetVersion = () => `11111111-1111-1111-1111-${String(budgetRevision).padStart(12, "0")}`;
    let posts = 0, slowDone; const slowFinished = new Promise(resolve => { slowDone = resolve; });
    let sessions = [{ id: 'current', isCurrent: true, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }, { id: 'other', isCurrent: false, createdAt: new Date(Date.now() - 86400000).toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }];
    await page.route('**/api/**', async route => {
@@ -38,6 +42,15 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     const byCurrency = [...new Set(active.map(s => s.currency))].map(currency => ({ currency, activeCount: active.filter(s => s.currency === currency).length, monthlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost, 0), yearlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost * 12, 0) }));
     if (url.pathname === '/api/auth/me') data = { username: 'dashboard-fixture' };
     else if (url.pathname === '/api/auth/logout') { status = 204; data = null; }
+    else if (url.pathname === '/api/budgets') {
+     if (request.method() === 'POST') { budgets = [{ id: 'budget-fixture', ...request.postDataJSON(), version: budgetVersion(), updatedAt: new Date().toISOString() }]; data = { id: budgets[0].id, version: budgets[0].version }; status = 201; }
+     else data = budgets.map(b => { const monthlyPlanned = active.filter(s => s.currency === b.currency && (!b.category || s.category === b.category)).reduce((sum, s) => sum + s.cost, 0); return { ...b, monthlyPlanned, remaining: b.monthlyLimit - monthlyPlanned, usagePercent: monthlyPlanned / b.monthlyLimit * 100, isOverBudget: monthlyPlanned > b.monthlyLimit }; });
+    } else if (url.pathname === '/api/budgets/budget-fixture') {
+     const version = request.method() === 'DELETE' ? url.searchParams.get('version') : request.postDataJSON().version;
+     if (version !== budgets[0]?.version) { status = 409; data = { title: 'Bugetul s-a schimbat într-un alt tab.' }; }
+     else if (request.method() === 'DELETE') { budgets = []; status = 204; }
+     else { budgetRevision++; budgets[0] = { ...budgets[0], ...request.postDataJSON(), version: budgetVersion() }; data = { id: budgets[0].id, version: budgets[0].version }; }
+    }
     else if (url.pathname === '/api/account') data = account;
     else if (url.pathname === '/api/account/change-email') {
      account.pendingEmail = request.postDataJSON().email;
@@ -95,6 +108,31 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    assert.ok(await page.getByText('10,00 EUR / lună · aproximativ 120,00 EUR / an', { exact: true }).isVisible()); checks++;
    const downloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Exportă calendar .ics', exact: true }).click();
    assert.equal((await downloadEvent).suggestedFilename(), 'abonamente.ics'); checks++;
+   await page.getByLabel('Valuta bugetului', { exact: true }).selectOption('EUR');
+   await page.getByLabel('Limita lunară a bugetului', { exact: true }).fill('100');
+   await page.getByRole('button', { name: 'Creează buget', exact: true }).click();
+   const budgetCard = page.getByRole('article', { name: 'Buget EUR general', exact: true });
+   await budgetCard.getByText('Depășit cu 20,00 EUR', { exact: true }).waitFor(); checks++;
+   assert.equal(await budgetCard.getByRole('progressbar').getAttribute('aria-valuenow'), '100'); checks++;
+   await page.reload(); await budgetCard.getByText('Depășit cu 20,00 EUR', { exact: true }).waitFor(); checks++;
+   const budgetAudit = await new AxeBuilder({ page }).include('section[aria-labelledby="budgets-title"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+   assert.deepEqual(budgetAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), []); checks++;
+   budgetRevision++; budgets[0].version = budgetVersion(); budgets[0].monthlyLimit = 120;
+   await page.getByRole('button', { name: 'Editează buget EUR general', exact: true }).click();
+   await page.getByLabel('Limita lunară a bugetului', { exact: true }).fill('150');
+   await page.getByRole('button', { name: 'Salvează bugetul', exact: true }).click();
+   await page.getByText('Bugetul s-a schimbat într-un alt tab.', { exact: true }).waitFor();
+   assert.equal(await page.getByLabel('Limita lunară a bugetului', { exact: true }).inputValue(), '150'); assert.equal(budgets[0].monthlyLimit, 120); checks++;
+   await page.getByRole('button', { name: 'Reîncarcă bugetele', exact: true }).click();
+   await budgetCard.getByText('Disponibil în buget: 0,00 EUR', { exact: true }).waitFor();
+   await page.getByRole('button', { name: 'Editează buget EUR general', exact: true }).click();
+   await page.getByLabel('Limita lunară a bugetului', { exact: true }).fill('200');
+   await page.getByRole('button', { name: 'Salvează bugetul', exact: true }).click();
+   await budgetCard.getByText('Disponibil în buget: 80,00 EUR', { exact: true }).waitFor(); checks++;
+   await noOverflow(); checks++;
+   await page.getByRole('button', { name: 'Șterge buget EUR general', exact: true }).click();
+   await page.getByRole('button', { name: 'Șterge bugetul', exact: true }).click();
+   await budgetCard.waitFor({ state: 'detached' }); assert.equal(items.length, 13); checks++;
    await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).click(); await page.getByRole('dialog').waitFor();
    await page.keyboard.press('Escape'); await page.getByRole('dialog').waitFor({ state: 'detached' });
    assert.equal(items[1].isActive, true); checks++;
@@ -113,8 +151,9 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    await page.getByLabel('Caută abonamente sau categorii', { exact: true }).fill('fast'); await page.getByRole('heading', { name: 'Fast result', exact: true }).waitFor();
    await slowFinished; assert.equal(await page.getByRole('heading', { name: 'Slow result', exact: true }).count(), 0); checks++;
    await page.getByLabel('Caută abonamente sau categorii', { exact: true }).fill(''); await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
+   await page.waitForFunction(() => document.querySelector('section[aria-labelledby="budgets-title"] button')?.disabled === false);
    const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
-   assert.deepEqual(audit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), [], `Axe at ${width}/${theme}`); checks++;
+   assert.deepEqual(audit.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, html: n.html, failure: n.failureSummary })) })), [], `Axe at ${width}/${theme}`); checks++;
    await page.getByRole('button', { name: 'Setări cont', exact: true }).click(); await page.getByRole('heading', { name: 'Sesiuni active', exact: true }).waitFor();
    const dialog = page.getByRole('dialog'); await noOverflow(); checks++;
    await dialog.getByRole('button').last().focus(); await page.keyboard.press('Tab');
@@ -190,6 +229,6 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
   await Promise.all([tabOne.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor(), tabTwo.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor()]);
   assert.equal(rotations, 1); checks++;
   await shared.close();
-  console.log(`PASS: ${checks} dashboard assertions at 1440/390/320 px in light/dark, including planning, savings, pause, duplicate, form preservation, stale-response protection, calendar, sessions, keyboard and WCAG`);
+  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including budgets, planning, pending email, cooldown, sessions, keyboard and WCAG`);
  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

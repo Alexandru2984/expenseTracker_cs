@@ -151,10 +151,8 @@ Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).
 
 ## Puncte deschise după această rundă
 
-- Cooldown persistent pe cont pentru emailuri și apărare la brute force distribuit;
-  limitele curente sunt pe IP, iar verificarea codului are maximum 5 încercări.
-- Email nou în așteptare, fără înlocuirea adresei curente înainte de confirmare;
-  actualul flux cere parola, revocă sesiunile și invalidează codurile vechi.
+- Backoff persistent pentru încercări de parolă per cont și apărare la brute force
+  distribuit; cooldown-ul emailurilor este implementat în continuarea acestei runde.
 - Index unic pentru username normalizat, pentru a elimina și cursa între
   înregistrări cu diferențe de majuscule; schimbarea necesită migrație controlată.
 - MFA/passkeys, audit de acces cu retenție explicită și recuperare cont.
@@ -227,3 +225,14 @@ edge; curl, browserul și proba .NET au primit răspunsurile așteptate.
 Cele 157 verificări UI și cele 93 teste backend sunt pentru scenariile din suite,
 nu o garanție de absență a tuturor defectelor. CI rămâne de executat și pe GitHub
 după publicarea commiturilor. Lista prioritizată de mai sus rămâne planul următor.
+
+## Continuare: conturi și bugete
+
+Emailul în așteptare, cooldown-ul persistent și revocarea corectă a refresh-urilor
+sunt documentate în [ACCOUNT-SECURITY.md](ACCOUNT-SECURITY.md). Bugetele persistente,
+calculele și protecția la editări concurente sunt în [BUDGETS.md](BUDGETS.md).
+115 teste backend trec pe PostgreSQL inițializat prin migrațiile reale, fără skip.
+259 verificări browser trec la 1440/390/320 px în light/dark, inclusiv bugete,
+persistență după reload, conflicte de editare, confirmare/anulare email și WCAG.
+Lansarea aplică migrațiile numai după verificarea pe backupul restaurat și probe
+de compatibilitate cu imaginile API veche și nouă. Activarea se înregistrează separat.

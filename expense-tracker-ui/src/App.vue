@@ -7,6 +7,7 @@ import LoginView from './components/LoginView.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 import AccountSettings from './components/AccountSettings.vue'
 import PlanningPanel from './components/PlanningPanel.vue'
+import BudgetPanel from './components/BudgetPanel.vue'
 import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight, Settings } from 'lucide-vue-next'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
 import { Doughnut, Bar } from 'vue-chartjs'
@@ -149,6 +150,7 @@ let toastId = 0
 function showToast(message, type = 'error') {
   const id = ++toastId
   toasts.value.push({ id, message, type })
+  if (toasts.value.length > 3) toasts.value.shift()
   const timer = setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); toastTimers.delete(timer) }, 6000)
   toastTimers.add(timer)
 }
@@ -383,6 +385,7 @@ onUnmounted(() => {
           </div>
 
           <PlanningPanel :data="insights" :exporting="exportingCalendar" @calendar="handleCalendar" />
+          <BudgetPanel :refresh-key="summary" :categories="insights?.byCategory ?? []" @toast="(m, t) => showToast(m, t)" />
 
           <div v-if="importReport" role="status" class="panel p-4 space-y-2 text-sm">
             <div class="flex justify-between gap-3"><h2 class="font-bold">Rezultatul importului</h2><button type="button" @click="importReport = null" class="text-xs underline">Închide raportul</button></div>

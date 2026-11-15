@@ -22,6 +22,54 @@ namespace ExpenseTracker.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ExpenseTracker.Api.Models.MonthlyBudget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CategoryKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<decimal>("MonthlyLimit")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Currency", "CategoryKey")
+                        .IsUnique();
+
+                    b.ToTable("Budgets", t =>
+                        {
+                            t.HasCheckConstraint("CK_Budgets_MonthlyLimit", "\"MonthlyLimit\" > 0 AND \"MonthlyLimit\" <= 1000000");
+                        });
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Models.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -198,6 +246,17 @@ namespace ExpenseTracker.Api.Migrations
                     b.HasIndex("UserId", "Purpose");
 
                     b.ToTable("VerificationCodes");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.MonthlyBudget", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Models.RefreshToken", b =>

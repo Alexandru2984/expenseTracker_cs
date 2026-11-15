@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
+    public DbSet<MonthlyBudget> Budgets => Set<MonthlyBudget>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -25,12 +26,34 @@ public class AppDbContext : DbContext
             if (entry.State is EntityState.Added or EntityState.Modified)
                 entry.Entity.UpdatedAt = now;
         }
+        foreach (var entry in ChangeTracker.Entries<MonthlyBudget>())
+        {
+            if (entry.State == EntityState.Added) entry.Entity.CreatedAt = now;
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+                entry.Entity.Version = Guid.NewGuid();
+            }
+        }
         return base.SaveChangesAsync(cancellationToken);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<MonthlyBudget>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint("CK_Budgets_MonthlyLimit", "\"MonthlyLimit\" > 0 AND \"MonthlyLimit\" <= 1000000"));
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.Category).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.CategoryKey).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.MonthlyLimit).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.UserId, e.Currency, e.CategoryKey }).IsUnique();
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<SubscriptionItem>(entity =>
         {
