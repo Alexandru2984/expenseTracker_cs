@@ -324,3 +324,31 @@ Validare finală: 136 teste backend fără skip, 339 execuții de aserțiuni das
 Configurația nginx activă este reflectată în ops. Sursa și artefactele au fost
 construite din același commit; documentarea ulterioară nu schimbă codul activ.
 Nu s-a făcut push și nu se declară o rulare CI remote.
+
+## Continuare: revizuire, probe și portabilitate
+
+- [Duplicate](DUPLICATES.md): analiză pe întregul cont, nume normalizat și valută,
+  includerea opțională a suspendatelor, revizuire prin înregistrarea actuală.
+  Nicio ștergere/combinare automată și nicio economie presupusă.
+- [Detalii și probe](SUBSCRIPTION-DETAILS.md): note text, link HTTP/HTTPS validat,
+  probă cu scadență coerentă inclusiv în DB, afișare pe mobil și revizuire.
+  Notele și URL-urile rămân în afara Finance, insights, duplicate și calendar.
+- [Portabilitate CSV](CSV-PORTABILITY.md): remedierea pierderii planurilor cu nume
+  identic, ID sursă per cont, formatare reversibilă sigură pentru spreadsheet,
+  reimport idempotent, export pe pagină și fișiere de maximum 1 MB.
+- Quota de 5000 este verificată tranzacțional pentru creare/import. Agregările
+  citesc numai câmpurile financiare necesare, fără notele și URL-urile lungi.
+  Nu s-au introdus dependențe sau furnizori noi și nu se trimit emailuri automate.
+
+Regresii CSV reproduse înainte de fix: 3 eșecuri pe date sintetice. Verificarea
+completă ulterioară: 177 teste backend pe PostgreSQL prin migrații, fără skip.
+Matricea browser și activarea în producție se consemnează după verificarea finală.
+
+Matricea browser a trecut în trei loturi 1440/390/320 px, light/dark: 145 aserțiuni
+per lot (435 execuții, inclusiv repetarea probei dintre taburi), plus 24 verificări
+Finance. Include formulare cu note, HTML afișat ca text, linkuri, probe, duplicate,
+export pe pagină, conflicte și WCAG. Activarea se consemnează după lansare.
+
+Următorul plan de produs: obiective de economisire persistente; notificări cu
+outbox SMTP, opt-in și fus orar; portabilitatea/ștergerea contului. MFA/passkeys,
+alertarea externă și backupul off-site rămân deschise. Nu sunt declarate livrate.

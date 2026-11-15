@@ -33,6 +33,7 @@ const loading = ref(false), error = ref(null), saving = ref(false), importBusy =
 const exportingCsv = ref(false), exportingCalendar = ref(false), logoutBusy = ref(false)
 const editingItem = ref(null), initialItem = ref(null), showForm = ref(false), importReport = ref(null)
 const historyItem = ref(null)
+const exportScope = ref('all')
 const reviewing = ref(false)
 const pendingIds = ref(new Set())
 const filters = ref({ search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 })
@@ -136,6 +137,7 @@ function resetAuthState() {
   subscriptions.value = []; summary.value = null; insights.value = null; totalItems.value = 0
   editingItem.value = null; initialItem.value = null; showForm.value = false; importReport.value = null
   historyItem.value = null
+  exportScope.value = 'all'
   reviewing.value = false
   error.value = null; loading.value = false; toasts.value = []
   if (confirmModal.value.visible) onCancel()
@@ -180,8 +182,14 @@ function download(blob, filename) {
 async function handleExport() {
   if (exportingCsv.value) return
   exportingCsv.value = true
-  try { const response = await subscriptionsApi.exportCsv(); download(response.data, `abonamente_${new Date().toISOString().slice(0, 10)}.csv`); showToast('Export CSV descărcat.', 'success') }
-  catch { showToast('Eroare la export CSV.') }
+  try {
+    const pageOnly = exportScope.value === 'page'
+    const response = await subscriptionsApi.exportCsv(pageOnly ? { ...filters.value, pageOnly: true } : {})
+    download(response.data, `abonamente_${pageOnly ? 'pagina_' : ''}${new Date().toISOString().slice(0, 10)}.csv`)
+    showToast('Export CSV descărcat.', 'success')
+  } catch (error) {
+    showToast(error.response?.status === 413 ? 'Exportul complet depășește 1 MB. Alege CSV: pagina curentă și exportă pe rând paginile.' : 'Eroare la export CSV.')
+  }
   finally { exportingCsv.value = false }
 }
 async function handleCalendar() {
@@ -423,7 +431,7 @@ onUnmounted(() => {
             <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex flex-col md:flex-row gap-4 justify-between items-center">
               <div class="relative w-full md:w-80">
                 <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" :size="16" />
-                <input v-model="filters.search" aria-label="Caută abonamente sau categorii" placeholder="Caută abonamente sau categorii..." class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 ring-indigo-500/20 transition" />
+                <input v-model="filters.search" maxlength="200" aria-label="Caută abonamente, categorii sau note" placeholder="Caută abonamente, categorii sau note..." class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 ring-indigo-500/20 transition" />
               </div>
               <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
                 <div class="flex bg-gray-50 dark:bg-gray-800 rounded-xl p-1 text-xs font-bold">
@@ -453,6 +461,7 @@ onUnmounted(() => {
                   <Upload :size="18" />
                 </button>
                 <input ref="fileInput" type="file" accept=".csv,text/csv" class="hidden" @change="handleImport" />
+                <select v-model="exportScope" aria-label="Conținut export CSV" class="max-w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-3 py-2 text-sm outline-none"><option value="all">CSV: tot contul</option><option value="page">CSV: pagina curentă</option></select>
                 <button @click="handleExport" :disabled="exportingCsv" class="p-2 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 disabled:opacity-50 transition" title="Export CSV" aria-label="Export CSV">
                   <Download :size="18" />
                 </button>

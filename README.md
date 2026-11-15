@@ -36,6 +36,7 @@ Funcționalități principale:
 - Istoric al prețurilor, variații lunare, paginare și protecție la formulare vechi
 - Detectarea posibilelor duplicate pe întregul cont, cu revizuire manuală
 - Note personale, link validat către furnizor și evidența perioadelor de probă
+- CSV portabil cu ID sursă per cont, protecție reversibilă pentru formule și export pe pagină
 - Grafice pe întregul cont și sursa cursului valutar afișată explicit
 
 ---
@@ -162,6 +163,7 @@ necesită header `X-CSRF-Token` egal cu cookie-ul `csrf_token` (double-submit). 
 | `GET` | `/api/subscriptions/calendar` | Export ICS al următoarelor scadențe salvate |
 | `POST` | `/api/subscriptions/{id}/status` | Suspendare/reactivare (`{ isActive: false/true }`) |
 | `GET` | `/api/subscriptions/{id}/price-history` | Istoric propriu de cost/valută/frecvență, paginat |
+| `GET` | `/api/subscriptions/duplicates` | Posibile duplicate pe întregul cont, cu opțiune includeInactive |
 | `GET` / `DELETE` | `/api/account/sessions[/{id}]` | Listare/revocare sesiuni proprii |
 | `GET` / `POST` | `/api/budgets` | Listare și creare bugete proprii |
 | `PUT` / `DELETE` | `/api/budgets/{id}` | Editare/ștergere cu versiunea curentă |
@@ -221,6 +223,7 @@ token-urilor, rezolvarea IP-ului real, izolarea pe utilizator (ownership) și fl
 
 Detalii: [securitatea conturilor](docs/ACCOUNT-SECURITY.md) și [bugete lunare](docs/BUDGETS.md).
 Continuare: [protecția loginului](docs/LOGIN-PROTECTION.md) și [istoricul prețurilor](docs/PRICE-HISTORY.md).
+Produs: [duplicate](docs/DUPLICATES.md), [note și probe](docs/SUBSCRIPTION-DETAILS.md), [CSV portabil](docs/CSV-PORTABILITY.md).
 
 ## Conectare cu Finance F#
 

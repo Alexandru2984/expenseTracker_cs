@@ -29,7 +29,8 @@ public sealed class BudgetsController(AppDbContext db, VerificationService verif
         var budgets = await db.Budgets.AsNoTracking().Where(b => b.UserId == userId)
             .OrderBy(b => b.Currency).ThenBy(b => b.Category).ToListAsync(ct);
         var items = await db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId && s.IsActive)
-            .Take(5001).ToListAsync(ct);
+            .OrderBy(s => s.Id).Take(5001).Select(s => new SubscriptionItem { Cost = s.Cost, Currency = s.Currency,
+                BillingPeriod = s.BillingPeriod, Category = s.Category, IsActive = s.IsActive }).ToListAsync(ct);
         if (items.Count > 5000) return StatusCode(413, new ProblemDetails { Title = "Analiza bugetelor acceptă maximum 5000 de abonamente active." });
         return Ok(budgets.Select(b =>
         {

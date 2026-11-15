@@ -89,5 +89,6 @@ public class DuplicateApiTests(TestApiFactory factory)
             await db.SaveChangesAsync();
         }
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.GetAsync("/api/subscriptions/duplicates")).StatusCode);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.GetAsync("/api/subscriptions/export")).StatusCode);
     }
 }

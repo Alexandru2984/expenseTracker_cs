@@ -19,6 +19,7 @@ namespace ExpenseTracker.Api.Controllers;
 [Authorize]
 public class SubscriptionsController : ControllerBase
 {
+    private const int MaxCsvBytes = 1_000_000;
     private readonly AppDbContext _db;
     private readonly CurrencyService _currencyService;
 
@@ -47,30 +48,7 @@ public class SubscriptionsController : ControllerBase
         take = Math.Clamp(take, 1, 200);
         var userId = GetUserId();
 
-        var query = _db.Subscriptions.Where(s => s.UserId == userId);
-
-        query = status?.ToLower() switch
-        {
-            "active" => query.Where(s => s.IsActive),
-            "inactive" => query.Where(s => !s.IsActive),
-            _ => query
-        };
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var searchLower = search.ToLower();
-            query = query.Where(s => s.Name.ToLower().Contains(searchLower) ||
-                                     s.Category.ToLower().Contains(searchLower) || s.Notes.ToLower().Contains(searchLower));
-        }
-
-        query = sortBy?.ToLower() switch
-        {
-            "cost" => sortDesc ? query.OrderByDescending(s => s.Cost) : query.OrderBy(s => s.Cost),
-            "nextbillingdate" => sortDesc ? query.OrderByDescending(s => s.NextBillingDate) : query.OrderBy(s => s.NextBillingDate),
-            "category" => sortDesc ? query.OrderByDescending(s => s.Category) : query.OrderBy(s => s.Category),
-            "currency" => sortDesc ? query.OrderByDescending(s => s.Currency) : query.OrderBy(s => s.Currency),
-            _ => sortDesc ? query.OrderByDescending(s => s.Name) : query.OrderBy(s => s.Name)
-        };
+        var query = QuerySubscriptions(userId, search, sortBy, sortDesc, status);
 
         var total = await query.CountAsync();
         var items = await query.Skip(skip).Take(take).ToListAsync();
@@ -96,28 +74,37 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> GetRatesStatus() => Ok(await _currencyService.GetSnapshotAsync());
 
     [HttpGet("export")]
-    public async Task<IActionResult> ExportCsv()
+    public async Task<IActionResult> ExportCsv([FromQuery] bool pageOnly = false, [FromQuery] int skip = 0, [FromQuery] int take = 50,
+        [FromQuery, StringLength(200)] string? search = null, [FromQuery] string? sortBy = "name", [FromQuery] bool sortDesc = false, [FromQuery] string? status = null)
     {
         var userId = GetUserId();
-        var items = await _db.Subscriptions.Where(s => s.UserId == userId).OrderBy(s => s.Name).ToListAsync();
+        var query = pageOnly ? QuerySubscriptions(userId, search, sortBy, sortDesc, status) : QuerySubscriptions(userId, null, "name", false, null);
+        var items = await (pageOnly ? query.Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, 50)) : query.Take(SubscriptionCapacity.Maximum + 1)).ToListAsync();
+        if (items.Count > SubscriptionCapacity.Maximum) return StatusCode(413, new ProblemDetails
+            { Title = "Exportul complet acceptă maximum 5000 de abonamente. Folosește exportul pe pagini." });
 
         var sb = new StringBuilder();
-        sb.AppendLine("Id,Name,Cost,Currency,BillingPeriod,NextBillingDate,Category,IsActive,CreatedAt,Notes,ProviderUrl,TrialEndsOn");
+        sb.AppendLine("Id,Name,Cost,Currency,BillingPeriod,NextBillingDate,Category,IsActive,CreatedAt,Notes,ProviderUrl,TrialEndsOn,FormatVersion");
+        var byteCount = Encoding.UTF8.GetPreamble().Length + Encoding.UTF8.GetByteCount(sb.ToString());
 
         foreach (var item in items)
         {
             var cost = item.Cost.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            sb.AppendLine(string.Join(',',
+            var line = string.Join(',',
                 item.Id,
-                Csv.Field(item.Name),
+                Csv.Field(item.Name, reversible: true),
                 cost,
-                Csv.Field(item.Currency),
+                Csv.Field(item.Currency, reversible: true),
                 item.BillingPeriod,
                 item.NextBillingDate.ToString("yyyy-MM-dd"),
-                Csv.Field(item.Category),
+                Csv.Field(item.Category, reversible: true),
                 item.IsActive,
                 item.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                Csv.Field(item.Notes), Csv.Field(item.ProviderUrl), item.TrialEndsOn?.ToString("yyyy-MM-dd") ?? ""));
+                Csv.Field(item.Notes, reversible: true), Csv.Field(item.ProviderUrl, reversible: true), item.TrialEndsOn?.ToString("yyyy-MM-dd") ?? "", "2");
+            byteCount += Encoding.UTF8.GetByteCount(line) + Encoding.UTF8.GetByteCount(Environment.NewLine);
+            if (byteCount > MaxCsvBytes) return StatusCode(413, new ProblemDetails
+                { Title = "Exportul complet depășește 1 MB. Alege CSV: pagina curentă și exportă pe rând paginile." });
+            sb.AppendLine(line);
         }
 
         // UTF-8 BOM so Excel opens accented characters correctly
@@ -132,7 +119,7 @@ public class SubscriptionsController : ControllerBase
     {
         if (file is null || file.Length == 0)
             return BadRequest(new ProblemDetails { Title = "Fișier lipsă.", Detail = "Încarcă un fișier CSV." });
-        if (file.Length > 1_000_000)
+        if (file.Length > MaxCsvBytes)
             return BadRequest(new ProblemDetails { Title = "Fișier prea mare.", Detail = "Dimensiune maximă 1 MB." });
 
         var userId = GetUserId();
@@ -157,7 +144,8 @@ public class SubscriptionsController : ControllerBase
         int iName = Col("name"), iCost = Col("cost"), iCur = Col("currency"),
             iPeriod = Col("billingperiod"), iDate = Col("nextbillingdate"),
             iCat = Col("category"), iActive = Col("isactive"),
-            iNotes = Col("notes"), iProvider = Col("providerurl"), iTrial = Col("trialendson");
+            iNotes = Col("notes"), iProvider = Col("providerurl"), iTrial = Col("trialendson"),
+            iId = Col("id"), iVersion = Col("formatversion");
 
         if (iName < 0 || iCost < 0 || iDate < 0)
             return BadRequest(new ProblemDetails
@@ -166,22 +154,31 @@ public class SubscriptionsController : ControllerBase
                 Detail = "Sunt necesare cel puțin coloanele Name, Cost și NextBillingDate."
             });
 
-        var existing = (await _db.Subscriptions
-                .Where(s => s.UserId == userId)
-                .Select(s => s.Name)
-                .ToListAsync())
-            .Select(n => n.ToLowerInvariant())
-            .ToHashSet();
-
+        var proposed = new List<(int Row, SubscriptionItem Item)>();
         int imported = 0, skipped = 0, rejected = 0;
         var errors = new List<string>();
         for (int r = 1; r < rows.Count; r++)
         {
             var row = rows[r];
-            string Get(int idx, bool trim = true) => idx >= 0 && idx < row.Count ? trim ? row[idx].Trim() : row[idx] : "";
+            var portable = iVersion >= 0 && iVersion < row.Count && row[iVersion].Trim() == "2";
+            string Get(int idx, bool trim = true)
+            {
+                var value = idx >= 0 && idx < row.Count ? row[idx] : "";
+                if (portable && (idx == iName || idx == iCur || idx == iCat || idx == iNotes || idx == iProvider)) value = Csv.PortableValue(value);
+                return trim ? value.Trim() : value;
+            }
 
             var name = Get(iName);
             void Reject(string message) { rejected++; if (errors.Count < 10) errors.Add($"Rândul {r + 1}: {message}"); }
+            if (Get(iVersion) is not ("" or "1" or "2"))
+            { Reject("versiune CSV necunoscută."); continue; }
+            Guid? sourceId = null;
+            if (Get(iId).Length > 0)
+            {
+                if (!Guid.TryParse(Get(iId), out var parsedId) || parsedId == Guid.Empty)
+                { Reject("Id invalid (GUID nenul)."); continue; }
+                sourceId = parsedId;
+            }
             if (!decimal.TryParse(Get(iCost), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
                 CultureInfo.InvariantCulture, out var cost))
             { Reject("cost invalid (separator zecimal: punct)."); continue; }
@@ -207,12 +204,12 @@ public class SubscriptionsController : ControllerBase
             var validation = new List<ValidationResult>();
             if (!Validator.TryValidateObject(dto, new ValidationContext(dto), validation, true))
             { Reject(string.Join(" ", validation.Select(v => v.ErrorMessage))); continue; }
-            if (existing.Contains(name.ToLowerInvariant())) { skipped++; continue; }
 
             var item = new SubscriptionItem
             {
                 Id = Guid.NewGuid(),
                 Name = name,
+                ImportSourceId = sourceId,
                 Cost = cost,
                 Currency = dto.Currency,
                 BillingPeriod = period,
@@ -222,12 +219,36 @@ public class SubscriptionsController : ControllerBase
                 UserId = userId
             };
             dto.Details.ApplyTo(item);
-            _db.Subscriptions.Add(item);
-            existing.Add(name.ToLowerInvariant());
-            imported++;
+            proposed.Add((r + 1, item));
         }
 
+        await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
+        await SubscriptionCapacity.LockAsync(_db, userId);
+        var ownedIds = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId)
+            .OrderBy(s => s.Id).Take(SubscriptionCapacity.Maximum + 1).Select(s => new { s.Id, s.ImportSourceId }).ToListAsync();
+        if (ownedIds.Count > SubscriptionCapacity.Maximum)
+            return Conflict(new ProblemDetails { Title = "Contul depășește limita de 5000 de abonamente. Redu numărul înainte de import." });
+        var knownIds = ownedIds.Select(s => s.Id).Concat(ownedIds.Where(s => s.ImportSourceId.HasValue).Select(s => s.ImportSourceId!.Value)).ToHashSet();
+        var legacyNames = proposed.Where(p => p.Item.ImportSourceId is null).Select(p => p.Item.Name).Distinct().ToArray();
+        var legacy = legacyNames.Length == 0 ? new List<SubscriptionItem>() : await _db.Subscriptions.AsNoTracking()
+            .Where(s => s.UserId == userId && legacyNames.Contains(s.Name)).ToListAsync();
+        var fingerprints = legacy.Select(SubscriptionImportKey.From).ToHashSet();
+        foreach (var proposal in proposed)
+        {
+            var item = proposal.Item; var key = SubscriptionImportKey.From(item);
+            if (item.ImportSourceId is { } source ? knownIds.Contains(source) : fingerprints.Contains(key))
+            { skipped++; continue; }
+            if (ownedIds.Count + imported >= SubscriptionCapacity.Maximum)
+            {
+                rejected++;
+                if (errors.Count < 10) errors.Add($"Rândul {proposal.Row}: limita de 5000 de abonamente a fost atinsă.");
+                continue;
+            }
+            _db.Subscriptions.Add(item); imported++; fingerprints.Add(key); knownIds.Add(item.Id);
+            if (item.ImportSourceId is { } importedId) knownIds.Add(importedId);
+        }
         if (imported > 0) await _db.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
 
         return Ok(new { imported, skipped, rejected, errors });
     }
@@ -254,6 +275,11 @@ public class SubscriptionsController : ControllerBase
     [EnableRateLimiting("writes")]
     public async Task<IActionResult> Create([FromBody] CreateSubscriptionDto dto)
     {
+        var userId = GetUserId();
+        await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
+        await SubscriptionCapacity.LockAsync(_db, userId);
+        if (await _db.Subscriptions.CountAsync(s => s.UserId == userId) >= SubscriptionCapacity.Maximum)
+            return Conflict(new ProblemDetails { Title = "Poți păstra maximum 5000 de abonamente. Elimină unul înainte de a crea altul." });
         var item = new SubscriptionItem
         {
             Id = Guid.NewGuid(),
@@ -264,12 +290,13 @@ public class SubscriptionsController : ControllerBase
             NextBillingDate = dto.NextBillingDate,
             Category = dto.Category?.Trim() ?? "",
             IsActive = dto.IsActive,
-            UserId = GetUserId()
+            UserId = userId
         };
 
         dto.Details?.ApplyTo(item);
         _db.Subscriptions.Add(item);
         await _db.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
         return CreatedAtAction(nameof(GetById), new { id = item.Id }, ToDto(item));
     }
 
@@ -318,7 +345,9 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> GetInsights(CancellationToken ct)
     {
         var userId = GetUserId();
-        var items = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId).Take(5001).ToListAsync(ct);
+        var items = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId).OrderBy(s => s.Id).Take(5001)
+            .Select(s => new SubscriptionItem { Id = s.Id, Name = s.Name, Cost = s.Cost, Currency = s.Currency, BillingPeriod = s.BillingPeriod,
+                NextBillingDate = s.NextBillingDate, Category = s.Category, IsActive = s.IsActive, TrialEndsOn = s.TrialEndsOn }).ToListAsync(ct);
         if (items.Count > 5000) return StatusCode(413, new ProblemDetails { Title = "Analiza acceptă maximum 5000 de abonamente." });
         return Ok(SubscriptionInsights.Build(items, DateOnly.FromDateTime(DateTime.UtcNow)));
     }
@@ -339,7 +368,8 @@ public class SubscriptionsController : ControllerBase
     {
         var userId = GetUserId();
         var items = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId && s.IsActive)
-            .OrderBy(s => s.NextBillingDate).ThenBy(s => s.Id).Take(5001).ToListAsync(ct);
+            .OrderBy(s => s.NextBillingDate).ThenBy(s => s.Id).Take(5001)
+            .Select(s => new SubscriptionItem { Id = s.Id, Name = s.Name, Cost = s.Cost, Currency = s.Currency, NextBillingDate = s.NextBillingDate, IsActive = s.IsActive }).ToListAsync(ct);
         if (items.Count > 5000) return StatusCode(413, new ProblemDetails { Title = "Calendarul acceptă maximum 5000 de abonamente." });
         return File(CalendarExport.Build(items, DateTime.UtcNow), "text/calendar; charset=utf-8", "abonamente.ics");
     }
@@ -359,7 +389,8 @@ public class SubscriptionsController : ControllerBase
     public async Task<IActionResult> GetSummary()
     {
         var userId = GetUserId();
-        var all = await _db.Subscriptions.Where(s => s.UserId == userId).ToListAsync();
+        var all = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId)
+            .Select(s => new { s.Cost, s.Currency, s.BillingPeriod, s.IsActive, s.NextBillingDate }).ToListAsync();
         var active = all.Where(s => s.IsActive).ToList();
 
         var byCurrency = active
@@ -388,6 +419,26 @@ public class SubscriptionsController : ControllerBase
             TotalSubscriptions = all.Count,
             DueThisWeek = dueThisWeek
         });
+    }
+
+    private IOrderedQueryable<SubscriptionItem> QuerySubscriptions(Guid userId, string? search, string? sortBy, bool sortDesc, string? status)
+    {
+        var query = _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId);
+        query = status?.ToLowerInvariant() switch { "active" => query.Where(s => s.IsActive), "inactive" => query.Where(s => !s.IsActive), _ => query };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.ToLowerInvariant();
+            query = query.Where(s => s.Name.ToLower().Contains(term) || s.Category.ToLower().Contains(term) || s.Notes.ToLower().Contains(term));
+        }
+        var ordered = sortBy?.ToLowerInvariant() switch
+        {
+            "cost" => sortDesc ? query.OrderByDescending(s => s.Cost) : query.OrderBy(s => s.Cost),
+            "nextbillingdate" => sortDesc ? query.OrderByDescending(s => s.NextBillingDate) : query.OrderBy(s => s.NextBillingDate),
+            "category" => sortDesc ? query.OrderByDescending(s => s.Category) : query.OrderBy(s => s.Category),
+            "currency" => sortDesc ? query.OrderByDescending(s => s.Currency) : query.OrderBy(s => s.Currency),
+            _ => sortDesc ? query.OrderByDescending(s => s.Name) : query.OrderBy(s => s.Name)
+        };
+        return ordered.ThenBy(s => s.Id);
     }
 
     private static SubscriptionResponseDto ToDto(SubscriptionItem item) => new()

@@ -139,6 +139,9 @@ namespace ExpenseTracker.Api.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
 
+                    b.Property<Guid?>("ImportSourceId")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -177,6 +180,9 @@ namespace ExpenseTracker.Api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "ImportSourceId")
+                        .IsUnique();
 
                     b.ToTable("Subscriptions", t =>
                         {

@@ -142,6 +142,7 @@ public class AppDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.UserId, e.ImportSourceId }).IsUnique();
         });
 
         modelBuilder.Entity<User>(entity =>

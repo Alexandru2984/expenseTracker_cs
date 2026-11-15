@@ -73,6 +73,10 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     else if (url.pathname === '/api/account/finance-tokens') data = { available: true, tokens: [] };
     else if (url.pathname === '/api/subscriptions/rates/status') data = { rates: { RON: 1, EUR: .2, USD: .22 }, source: 'live', fetchedAt: new Date().toISOString() };
     else if (url.pathname === '/api/subscriptions/summary') data = { byCurrency, activeSubscriptions: active.length, totalSubscriptions: items.length, dueThisWeek: active.length };
+    else if (url.pathname === '/api/subscriptions/export') {
+     if (url.searchParams.get('pageOnly') !== 'true') { status = 413; data = { title: 'Synthetic complete export limit' }; }
+     else { await route.fulfill({ status: 200, contentType: 'text/csv', body: 'Id,Name,Cost,NextBillingDate,FormatVersion\n11111111-1111-1111-1111-111111111111,Portable,10,2027-01-01,2\n' }); return; }
+    }
     else if (url.pathname === '/api/subscriptions/duplicates') data = { checkedCount: items.length, includeInactive: url.searchParams.get('includeInactive') === 'true', groups: [{ name: 'Alpha service', currency: 'EUR', activeMonthlyTotal: 20, items: [items[1], { ...items[1], id: 'duplicate-alpha', cost: 120, billingPeriod: 'Yearly' }] }] };
     else if (/^\/api\/subscriptions\/[0-9a-f-]{36}$/.test(url.pathname) && request.method() === 'GET') data = items.find(s => s.id === url.pathname.split('/').at(-1));
     else if (/^\/api\/subscriptions\/[^/]+\/price-history$/.test(url.pathname)) {
@@ -141,6 +145,15 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    await page.locator('#subscription-form').waitFor({ state: 'detached' });
    assert.equal(items[2].details.trialEndsOn, date(3)); assert.equal(items[2].details.notes, 'Plan probă\nCondiții verificate.'); checks++;
    await page.getByText('Se încheie în 3 zile', { exact: false }).waitFor(); checks++;
+   await page.getByRole('button', { name: 'Export CSV', exact: true }).click();
+   await page.getByText('Exportul complet depășește 1 MB. Alege CSV: pagina curentă și exportă pe rând paginile.', { exact: true }).waitFor(); checks++;
+   await page.getByLabel('Conținut export CSV', { exact: true }).selectOption('page');
+   const csvDownload = page.waitForEvent('download');
+   const csvRequest = page.waitForRequest(r => new URL(r.url()).pathname === '/api/subscriptions/export' && new URL(r.url()).searchParams.get('pageOnly') === 'true');
+   await page.getByRole('button', { name: 'Export CSV', exact: true }).click();
+   const exportQuery = new URL((await csvRequest).url()).searchParams;
+   assert.equal(exportQuery.get('skip'), '0'); assert.equal(exportQuery.get('take'), '10'); checks++;
+   assert.match((await csvDownload).suggestedFilename(), /^abonamente_pagina_.*\.csv$/); checks++;
    await page.getByRole('button', { name: 'Arată 1 grup posibil duplicat', exact: true }).click();
    await page.getByRole('button', { name: 'Revizuiește Alpha service 120,00 EUR', exact: true }).waitFor(); checks++;
    const includePausedRequest = page.waitForRequest(r => new URL(r.url()).pathname === '/api/subscriptions/duplicates' && new URL(r.url()).searchParams.get('includeInactive') === 'true');
@@ -230,10 +243,10 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    assert.equal(posts, 1); assert.equal(await page.getByLabel('Nume', { exact: true }).inputValue(), 'Alpha service (copie)'); checks++;
    await page.getByRole('button', { name: 'Adaugă abonament', exact: true }).click(); await page.locator('#subscription-form').waitFor({ state: 'detached' }); assert.equal(posts, 2); checks++;
    const slowRequest = page.waitForRequest(request => new URL(request.url()).searchParams.get('search') === 'slow');
-   await page.getByLabel('Caută abonamente sau categorii', { exact: true }).fill('slow'); await slowRequest;
-   await page.getByLabel('Caută abonamente sau categorii', { exact: true }).fill('fast'); await page.getByRole('heading', { name: 'Fast result', exact: true }).waitFor();
+   await page.getByLabel('Caută abonamente, categorii sau note', { exact: true }).fill('slow'); await slowRequest;
+   await page.getByLabel('Caută abonamente, categorii sau note', { exact: true }).fill('fast'); await page.getByRole('heading', { name: 'Fast result', exact: true }).waitFor();
    await slowFinished; assert.equal(await page.getByRole('heading', { name: 'Slow result', exact: true }).count(), 0); checks++;
-   await page.getByLabel('Caută abonamente sau categorii', { exact: true }).fill(''); await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
+   await page.getByLabel('Caută abonamente, categorii sau note', { exact: true }).fill(''); await page.getByRole('button', { name: 'Suspendă Alpha service', exact: true }).waitFor();
    await page.waitForFunction(() => document.querySelector('section[aria-labelledby="budgets-title"] button')?.disabled === false);
    const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
    assert.deepEqual(audit.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, html: n.html, failure: n.failureSummary })) })), [], `Axe at ${width}/${theme}`); checks++;
@@ -312,6 +325,6 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
   await Promise.all([tabOne.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor(), tabTwo.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor()]);
   assert.equal(rotations, 1); checks++;
   await shared.close();
-  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including price history, stale edits, budgets, planning, pending email, cooldown, sessions, keyboard and WCAG`);
+  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including duplicates, private details, trials, paged CSV, price history, budgets, account security, keyboard and WCAG`);
  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

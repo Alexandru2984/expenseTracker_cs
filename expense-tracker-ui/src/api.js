@@ -118,7 +118,7 @@ export const subscriptionsApi = {
   duplicates: (params = {}, signal) => api.get('/subscriptions/duplicates', { params, signal }),
   setStatus: (id, isActive) => api.post(`/subscriptions/${encodeURIComponent(id)}/status`, { isActive }),
   exportCalendar: () => api.get('/subscriptions/calendar', { responseType: 'blob' }),
-  exportCsv: () => api.get('/subscriptions/export', { responseType: 'blob' }),
+  exportCsv: (params = {}) => api.get('/subscriptions/export', { params, responseType: 'blob' }),
   importCsv: (formData) => api.post('/subscriptions/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })

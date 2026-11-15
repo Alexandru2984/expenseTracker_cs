@@ -10,13 +10,18 @@ public static class Csv
     /// Quotes a CSV field and neutralizes spreadsheet formula injection
     /// (values starting with = + - @ or control chars are prefixed with ').
     /// </summary>
-    public static string Field(string? value)
+    public static string Field(string? value, bool reversible = false)
     {
         value ??= string.Empty;
-        if (value.Length > 0 && (char.IsControl(value[0]) || value.TrimStart().FirstOrDefault() is '=' or '+' or '-' or '@'))
+        if (value.Length > 0 && (char.IsControl(value[0]) || value.TrimStart().FirstOrDefault() is '=' or '+' or '-' or '@'
+            || (reversible && value.StartsWith('\''))))
             value = "'" + value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
+
+    // Only used for explicitly versioned v2 rows. Leading quotes in original
+    // content are doubled at export, so removing one is unambiguous.
+    public static string PortableValue(string value) => value.StartsWith('\'') ? value[1..] : value;
 
     public static List<List<string>> Parse(string content, int maxRows = 5001, int maxColumns = 32)
     {

@@ -27,6 +27,8 @@ public class SubscriptionItem
     public string Notes { get; set; } = string.Empty;
     public string ProviderUrl { get; set; } = string.Empty;
     public DateOnly? TrialEndsOn { get; set; }
+    // Import identity is scoped to the owning account; never used as an entity ID/FK.
+    public Guid? ImportSourceId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
