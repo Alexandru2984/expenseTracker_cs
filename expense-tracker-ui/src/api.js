@@ -6,6 +6,12 @@ const api = axios.create({
   withCredentials: true // send/receive the httpOnly auth cookies
 })
 
+let sessionGeneration = 0
+export function advanceApiSession() { sessionGeneration++ }
+function requireSession(generation) {
+  if (generation !== sessionGeneration) throw new axios.CanceledError('Contextul de autentificare s-a schimbat.')
+}
+
 // Read a cookie value by name (used for the CSRF double-submit token).
 function getCookie(name) {
   const escaped = name.replace(/([.*+?^${}()|[\]\\])/g, '\\$1')
@@ -15,6 +21,8 @@ function getCookie(name) {
 
 // Attach the CSRF token header on state-changing requests.
 api.interceptors.request.use(config => {
+  config._sessionGeneration ??= sessionGeneration
+  requireSession(config._sessionGeneration)
   const method = (config.method ?? 'get').toLowerCase()
   if (['post', 'put', 'patch', 'delete'].includes(method)) {
     const csrf = getCookie('csrf_token')
@@ -24,29 +32,35 @@ api.interceptors.request.use(config => {
 })
 
 // Single in-flight refresh shared by all concurrent 401s.
-let refreshPromise = null
-function refreshSession() {
-  if (!refreshPromise) {
+let refreshState = null
+function refreshSession(generation) {
+  requireSession(generation)
+  if (!refreshState || refreshState.generation !== generation) {
     const rotate = async () => {
+      requireSession(generation)
       // A different tab may already have refreshed the shared cookies while we
       // waited for the lock. Recheck before rotating a single-use token again.
       try { await api.get('/auth/me', { _skipRefresh: true }); return }
       catch (error) { if (error.response?.status !== 401) throw error }
+      requireSession(generation)
       await api.post('/auth/refresh')
     }
     const operation = navigator.locks?.request
       ? navigator.locks.request('expense-session-refresh', rotate)
-      : api.post('/auth/refresh')
-    refreshPromise = operation.finally(() => { refreshPromise = null })
+      : rotate()
+    const state = { generation, promise: null }
+    state.promise = operation.finally(() => { if (refreshState === state) refreshState = null })
+    refreshState = state
   }
-  return refreshPromise
+  return refreshState.promise
 }
 
 // On 401 for a normal call, try one silent refresh then replay the request.
 api.interceptors.response.use(
-  res => res,
+  res => { requireSession(res.config._sessionGeneration); return res },
   async err => {
     const original = err.config
+    if (original) requireSession(original._sessionGeneration)
     const status = err.response?.status
     const url = original?.url ?? ''
     const isAuthCall = /\/auth\/(login|register|refresh|logout|verify-email|resend-code|forgot-password|reset-password)/.test(url)
@@ -54,10 +68,11 @@ api.interceptors.response.use(
     if (status === 401 && original && !original._retry && !original._skipRefresh && !isAuthCall) {
       original._retry = true
       try {
-        await refreshSession()
+        await refreshSession(original._sessionGeneration)
+        requireSession(original._sessionGeneration)
         return api(original)
       } catch (e) {
-        window.dispatchEvent(new Event('auth:logout'))
+        if (original._sessionGeneration === sessionGeneration && !axios.isCancel(e)) window.dispatchEvent(new Event('auth:logout'))
         return Promise.reject(e)
       }
     }

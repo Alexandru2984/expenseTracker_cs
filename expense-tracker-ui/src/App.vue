@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { subscriptionsApi, authApi, accountApi } from './api.js'
+import { subscriptionsApi, authApi, accountApi, advanceApiSession } from './api.js'
 import SubscriptionForm from './components/SubscriptionForm.vue'
 import SubscriptionList from './components/SubscriptionList.vue'
 import LoginView from './components/LoginView.vue'
@@ -126,11 +126,13 @@ async function bootstrapAuth() {
   finally { authReady.value = true }
 }
 function handleLogin(data) {
+  advanceApiSession()
   authEpoch++
   isAuthenticated.value = true; currentUser.value = data.username
   fetchAll(); fetchRates(); fetchAccount()
 }
 function resetAuthState() {
+  advanceApiSession()
   authEpoch++
   requestEpoch++; clearTimeout(searchTimer)
   isAuthenticated.value = false; currentUser.value = ''; account.value = null; showSettings.value = false
@@ -139,6 +141,7 @@ function resetAuthState() {
   historyItem.value = null
   exportScope.value = 'all'
   reviewing.value = false
+  exportingCsv.value = false; exportingCalendar.value = false
   error.value = null; loading.value = false; toasts.value = []
   if (confirmModal.value.visible) onCancel()
   filters.value = { search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 }
@@ -182,22 +185,28 @@ function download(blob, filename) {
 async function handleExport() {
   if (exportingCsv.value) return
   exportingCsv.value = true
+  const epoch = authEpoch
   try {
     const pageOnly = exportScope.value === 'page'
     const response = await subscriptionsApi.exportCsv(pageOnly ? { ...filters.value, pageOnly: true } : {})
+    if (epoch !== authEpoch || !isAuthenticated.value) return
     download(response.data, `abonamente_${pageOnly ? 'pagina_' : ''}${new Date().toISOString().slice(0, 10)}.csv`)
     showToast('Export CSV descărcat.', 'success')
   } catch (error) {
-    showToast(error.response?.status === 413 ? 'Exportul complet depășește 1 MB. Alege CSV: pagina curentă și exportă pe rând paginile.' : 'Eroare la export CSV.')
+    if (epoch === authEpoch) showToast(error.response?.status === 413 ? 'Exportul complet depășește 1 MB. Alege CSV: pagina curentă și exportă pe rând paginile.' : 'Eroare la export CSV.')
   }
-  finally { exportingCsv.value = false }
+  finally { if (epoch === authEpoch) exportingCsv.value = false }
 }
 async function handleCalendar() {
   if (exportingCalendar.value) return
   exportingCalendar.value = true
-  try { download((await subscriptionsApi.exportCalendar()).data, 'abonamente.ics'); showToast('Calendar descărcat.', 'success') }
-  catch { showToast('Calendarul nu a putut fi exportat.') }
-  finally { exportingCalendar.value = false }
+  const epoch = authEpoch
+  try {
+    const response = await subscriptionsApi.exportCalendar()
+    if (epoch !== authEpoch || !isAuthenticated.value) return
+    download(response.data, 'abonamente.ics'); showToast('Calendar descărcat.', 'success')
+  } catch { if (epoch === authEpoch) showToast('Calendarul nu a putut fi exportat.') }
+  finally { if (epoch === authEpoch) exportingCalendar.value = false }
 }
 const fileInput = ref(null)
 function triggerImport() { if (!importBusy.value) fileInput.value?.click() }

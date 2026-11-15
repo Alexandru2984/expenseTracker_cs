@@ -325,6 +325,75 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
   await Promise.all([tabOne.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor(), tabTwo.getByRole('heading', { name: 'Bună, shared-tabs.' }).waitFor()]);
   assert.equal(rotations, 1); checks++;
   await shared.close();
-  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including duplicates, private details, trials, paged CSV, price history, budgets, account security, keyboard and WCAG`);
+  // A response authorized before logout must not download private data into
+  // the browser after the UI has switched away from that account.
+  for (const resource of ['csv', 'calendar']) {
+   const raceContext = await browser.newContext({ serviceWorkers: 'block' });
+   const racePage = await raceContext.newPage(), downloads = [];
+   racePage.on('download', event => downloads.push(event));
+   let releaseResponse, markRequested;
+   const gate = new Promise(resolve => { releaseResponse = resolve; });
+   const requested = new Promise(resolve => { markRequested = resolve; });
+   const exportPath = resource === 'csv' ? '/api/subscriptions/export' : '/api/subscriptions/calendar';
+   await racePage.route('https://analytics.micutu.com/**', route => route.abort());
+   await racePage.route('**/api/**', async route => {
+    const pathname = new URL(route.request().url()).pathname; let data = {}, status = 200;
+    if (pathname === exportPath) {
+     markRequested(); await gate;
+     await route.fulfill({ status: 200, contentType: resource === 'csv' ? 'text/csv' : 'text/calendar', body: 'PRIVATE_SYNTHETIC_EXPORT' }); return;
+    }
+    if (pathname === '/api/auth/me') data = { username: 'export-race' };
+    else if (pathname === '/api/auth/logout') status = 204;
+    else if (pathname === '/api/account') data = { username: 'export-race', email: 'synthetic@example.invalid', emailVerified: true };
+    else if (pathname === '/api/subscriptions') data = { items: [], total: 0 };
+    else if (pathname === '/api/subscriptions/summary') data = { byCurrency: [], totalSubscriptions: 0, activeSubscriptions: 0, dueThisWeek: 0 };
+    else if (pathname === '/api/subscriptions/insights') data = { forecast: [], byCategory: [], upcoming: [], overdue: [], savingsOpportunities: [] };
+    else if (pathname === '/api/budgets') data = [];
+    else if (pathname === '/api/subscriptions/duplicates') data = { checkedCount: 0, groups: [] };
+    await route.fulfill({ status, contentType: 'application/json', body: status === 204 ? '' : JSON.stringify(data) });
+   });
+   await racePage.goto(`http://127.0.0.1:${server.address().port}`);
+   await racePage.getByRole('heading', { name: 'Bună, export-race.' }).waitFor();
+   await racePage.getByRole('button', { name: resource === 'csv' ? 'Export CSV' : 'Exportă calendar .ics', exact: true }).click();
+   await requested;
+   await racePage.getByRole('button', { name: 'Ieșire', exact: true }).click();
+   await racePage.getByRole('button', { name: 'Conectare', exact: true }).waitFor();
+   const received = racePage.waitForResponse(response => new URL(response.url()).pathname === exportPath);
+   releaseResponse(); await received; await racePage.waitForTimeout(300);
+   assert.equal(downloads.length, 0, `${resource} download after logout`); checks++;
+   await raceContext.close();
+  }
+  const writeContext = await browser.newContext({ serviceWorkers: 'block' });
+  const writePage = await writeContext.newPage();
+  let releaseWrite, markWrite, sentWrite = false, replayedWrites = 0;
+  const writeGate = new Promise(resolve => { releaseWrite = resolve; });
+  const writeRequested = new Promise(resolve => { markWrite = resolve; });
+  await writePage.route('https://analytics.micutu.com/**', route => route.abort());
+  await writePage.route('**/api/**', async route => {
+   const pathname = new URL(route.request().url()).pathname; let data = {}, status = 200;
+   if (pathname === '/api/subscriptions' && route.request().method() === 'POST') {
+    if (!sentWrite) { sentWrite = true; markWrite(); await writeGate; status = 401; }
+    else { replayedWrites++; status = 201; data = item('replayed', 'Wrong session'); }
+   } else if (pathname === '/api/auth/me') data = { username: 'write-race' };
+   else if (pathname === '/api/auth/logout') status = 204;
+   else if (pathname === '/api/subscriptions') data = { items: [], total: 0 };
+   else if (pathname === '/api/subscriptions/summary') data = { byCurrency: [], totalSubscriptions: 0, activeSubscriptions: 0, dueThisWeek: 0 };
+   else if (pathname === '/api/subscriptions/insights') data = { forecast: [], byCategory: [], upcoming: [], overdue: [], savingsOpportunities: [] };
+   else if (pathname === '/api/budgets') data = [];
+   await route.fulfill({ status, contentType: 'application/json', body: status === 204 ? '' : JSON.stringify(data) });
+  });
+  await writePage.goto(`http://127.0.0.1:${server.address().port}`);
+  await writePage.getByRole('heading', { name: 'Bună, write-race.' }).waitFor();
+  await writePage.getByRole('button', { name: '+ Nou', exact: true }).click();
+  await writePage.getByLabel('Nume', { exact: true }).fill('Old session request');
+  await writePage.getByLabel('Cost', { exact: true }).fill('10');
+  await writePage.getByRole('button', { name: 'Adaugă abonament', exact: true }).click(); await writeRequested;
+  await writePage.getByRole('button', { name: 'Ieșire', exact: true }).click();
+  await writePage.getByRole('button', { name: 'Conectare', exact: true }).waitFor();
+  const refusedWrite = writePage.waitForResponse(response => new URL(response.url()).pathname === '/api/subscriptions' && response.request().method() === 'POST');
+  releaseWrite(); await refusedWrite; await writePage.waitForTimeout(300);
+  assert.equal(replayedWrites, 0, 'An old 401 must not replay a mutation under a later authentication context'); checks++;
+  await writeContext.close();
+  console.log(`PASS: ${checks} dashboard assertions at ${widths.join("/")} px in ${themes.join("/")}, including duplicates, private details, trials, paged CSV, session-bound requests, price history, budgets, keyboard and WCAG`);
  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

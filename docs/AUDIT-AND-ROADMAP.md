@@ -352,3 +352,12 @@ export pe pagină, conflicte și WCAG. Activarea se consemnează după lansare.
 Următorul plan de produs: obiective de economisire persistente; notificări cu
 outbox SMTP, opt-in și fus orar; portabilitatea/ștergerea contului. MFA/passkeys,
 alertarea externă și backupul off-site rămân deschise. Nu sunt declarate livrate.
+
+## Continuare: răspunsuri întârziate în browser
+
+[BROWSER-SESSION-BOUNDARIES.md](BROWSER-SESSION-BOUNDARIES.md) documentează o regresie
+reprodusă: un export autorizat înainte de logout se descărca ulterior. Exporturile
+CSV/calendar și clientul API verifică acum contextul local; un 401 vechi nu reia
+o mutație după schimbarea sesiunii. Matricea finală include trei probe suplimentare
+pentru aceste cazuri. Coordonarea completă login/logout/cookie-uri între taburi
+rămâne prioritate de securitate, alături de MFA și alertare.
