@@ -54,12 +54,14 @@ def main():
     try:
         command(['docker','run','-d','--name',probe,'--network','none','--memory','256m','--pids-limit','128','--tmpfs','/var/lib/postgresql/data:rw,nosuid,noexec,size=128m','-e','POSTGRES_HOST_AUTH_METHOD=trust',pgimage])
         for _ in range(100):
-            if subprocess.run(['docker','exec',probe,'pg_isready','-U','postgres'],capture_output=True).returncode==0:break
+            # initdb temporarily starts a socket-only server, then stops it.
+            # TCP readiness identifies the final server and avoids that race.
+            if subprocess.run(['docker','exec',probe,'pg_isready','-h','127.0.0.1','-U','postgres'],capture_output=True).returncode==0:break
             time.sleep(.1)
         else:raise RuntimeError('Restore probe was not ready')
         with archive.open('rb') as saved:
-            command(['docker','exec','-i',probe,'pg_restore','--exit-on-error','--no-owner','--no-privileges','-U','postgres','-d','postgres'],stdin=saved)
-        counts=command(['docker','exec',probe,'psql','-U','postgres','-d','postgres','-At','-c','SELECT json_build_object(\'users\',(SELECT COUNT(*) FROM "Users"),\'subscriptions\',(SELECT COUNT(*) FROM "Subscriptions"))'],text=True).stdout.strip()
+            command(['docker','exec','-i',probe,'pg_restore','--exit-on-error','--no-owner','--no-privileges','-h','127.0.0.1','-U','postgres','-d','postgres'],stdin=saved)
+        counts=command(['docker','exec',probe,'psql','-h','127.0.0.1','-U','postgres','-d','postgres','-At','-c','SELECT json_build_object(\'users\',(SELECT COUNT(*) FROM "Users"),\'subscriptions\',(SELECT COUNT(*) FROM "Subscriptions"))'],text=True).stdout.strip()
         json.loads(counts)
         print('Verified PostgreSQL backup restored in isolation; table counts:',counts)
     finally:subprocess.run(['docker','rm','-f',probe],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

@@ -102,3 +102,8 @@ testele au folosit exclusiv conturi sintetice în baze temporare.
   primele 10 erori. Valorile invalide nu sunt ajustate automat. Crearea respectă
   IsActive; DueThisWeek nu mai include restanțele. Protecția la formule CSV acoperă
   și newline sau whitespace înaintea formulei.
+
+- Verificare operațională: a doua lansare s-a oprit înainte de mutații deoarece
+  `pg_isready` observa serverul temporar de initdb, apoi `pg_restore` întâlnea
+  oprirea lui. Reprodus în container separat; readiness/restore folosesc acum TCP
+  loopback, disponibil numai pe serverul final. Backupul și rollbackul rămân obligatorii.
