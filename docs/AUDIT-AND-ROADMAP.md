@@ -378,3 +378,39 @@ Reverifică starea/sursa după restore drill și restaurează pin-ul la rollback
 Patru teste locale, inclusiv încărcarea reală a configurației Compose fără `-f`,
 verifică pin-ul, configurația DB identică și refuzul referințelor mutabile,
 override-urilor străine și symlink-urilor.
+
+## Lansare produs și persistență verificată — 16 noiembrie
+
+Cod activ: `edc79a16354d2abe796828971cb326259ed30021`, imagine
+`expensetracker_cs-api:release-edc79a16354d2abe796828971cb326259ed30021`.
+Backup/rollback privat:
+`/var/backups/expense-tracker/deploy-20261115T232430Z` (timestamp UTC).
+
+Backupul a fost restaurat izolat; 10 → 12 migrații, repetare idempotentă și probe
+de citire cu API-ul vechi și cel nou. Numărul de conturi/abonamente s-a păstrat
+în probă (0/0 la snapshot). Cele două migrații adaugă detaliile/proba, constraintul
+de scadență și identitatea de import/indexul per cont, fără rescrierea prețurilor
+sau evenimentelor. Istoricul bazei active confirmă toate cele 12 migrații.
+ID-ul și StartedAt ale containerului PostgreSQL sunt identice înainte/după această
+lansare; recrearea observată la 19:56 UTC a fost anterioară. API healthy, zero
+restarturi. Configurația nginx activă este reflectată în ops.
+
+Override-ul implicit Compose este root-owned și fixează image ID-ul activ.
+Configurația implicită, fără `-f`, rezolvă exact aceeași imagine. Comparația
+mediului DB nu arată drift; dry-run-ul pentru API raportează containerul Running,
+fără recreare. Nu s-a rulat un `compose up` general sau un restart DB pentru probă.
+Cele 4 teste de pin sunt incluse și în workflow-ul CI; nu s-a făcut push sau rulat
+workflow-ul remote.
+
+Verificări publice: health 200; abonamente/duplicate/export/bugete/Finance anonime
+401, cu no-store și un singur X-Frame-Options: DENY. Revizia UI corespunde imaginii
+API. Nonce CSP diferit între răspunsuri HTML. Chromium la 390 px nu arată overflow,
+erori JavaScript sau CSP. F# HttpClient confirmă 401/no-store pentru snapshot și
+istoric fără token; contractul Finance rămâne schemaVersion 1 și exclude notele/
+URL-urile personale.
+
+Validare: 177 teste backend pe PostgreSQL prin migrații, fără skip; 444 execuții de
+aserțiuni browser în trei loturi desktop/mobil light/dark; 24 verificări Finance
+pe buildul final; 4 teste de deployment. Probele autentificate folosesc numai
+date sintetice; nu s-au creat conturi sau trimis emailuri de test în producție.
+Documentarea ulterioară nu schimbă revizia de cod activă.
