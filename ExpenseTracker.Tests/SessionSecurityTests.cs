@@ -79,7 +79,7 @@ public class SessionSecurityTests(TestApiFactory factory)
     }
 
     [Fact]
-    public async Task Email_change_requires_password_and_invalidates_previous_inbox_codes()
+    public async Task Email_change_requires_password_and_keeps_current_inbox_and_sessions_until_confirmation()
     {
         var (client, captured, user) = await Login();
         var email = Guid.NewGuid().ToString("N") + "@example.invalid";
@@ -92,12 +92,13 @@ public class SessionSecurityTests(TestApiFactory factory)
             await db.SaveChangesAsync();
         }
         (await client.PostAsJsonAsync("/api/account/change-email", new { email, currentPassword = Password })).EnsureSuccessStatusCode();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await captured.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await captured.GetAsync("/api/auth/me")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/account")).StatusCode);
         using var check = factory.Services.CreateScope();
-        var oldCode = await check.ServiceProvider.GetRequiredService<AppDbContext>().VerificationCodes
-            .SingleAsync(c => c.UserId == user.Id && c.ConsumedAt != null);
-        Assert.NotNull(oldCode.ConsumedAt);
+        var stored = (await check.ServiceProvider.GetRequiredService<AppDbContext>().Users.FindAsync(user.Id))!;
+        Assert.Equal(user.Email, stored.Email);
+        Assert.True(stored.EmailVerified);
+        Assert.Equal(email, stored.PendingEmail);
     }
 
     [Fact]
@@ -169,5 +170,29 @@ public class SessionSecurityTests(TestApiFactory factory)
         await second.SaveChangesAsync();
         verifying.EmailVerified = true;
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => first.SaveChangesAsync());
+    }
+
+    [Theory]
+    [InlineData("/api/auth/logout")]
+    [InlineData("/api/account/logout-all")]
+    public async Task Refresh_revoked_by_logout_cannot_disconnect_a_later_login(string endpoint)
+    {
+        var (old, captured, user) = await Login();
+        (await old.PostAsync(endpoint, null)).EnsureSuccessStatusCode();
+        using var fresh = factory.CreateClient();
+        (await fresh.PostAsJsonAsync("/api/auth/login", new { user.Username, password = Password })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await captured.PostAsync("/api/auth/refresh", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await fresh.GetAsync("/api/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Historical_rotation_cannot_revoke_the_new_session_after_password_change()
+    {
+        var (client, captured, _) = await Login();
+        (await client.PostAsync("/api/auth/refresh", null)).EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync("/api/account/change-password",
+            new { currentPassword = Password, newPassword = "new-safe-session-password" })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await captured.PostAsync("/api/auth/refresh", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
     }
 }

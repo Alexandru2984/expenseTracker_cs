@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { authApi } from '../api.js'
+import { useCooldown } from '../useCooldown.js'
 
 const emit = defineEmits(['login'])
 
@@ -19,6 +20,8 @@ const resetEmail = ref('')     // account awaiting password reset
 const error = ref('')
 const info = ref('')
 const loading = ref(false)
+const cooldown = useCooldown()
+const retrySeconds = cooldown.remaining
 
 const titles = {
   login: 'Conectează-te pentru a continua.',
@@ -94,6 +97,7 @@ async function doRegister() {
     password: password.value
   })
   verifyUsername.value = res.data.username ?? username.value.trim()
+  cooldown.start(res.data.retryAfterSeconds ?? 60)
   code.value = ''
   info.value = res.data.message ?? 'Ți-am trimis un cod de verificare pe email.'
   mode.value = 'verify'
@@ -109,13 +113,14 @@ async function doVerify() {
 }
 
 async function resend() {
-  if (loading.value) return
+  if (loading.value || retrySeconds.value > 0) return
   error.value = ''
   info.value = ''
   loading.value = true
   try {
-    await authApi.resendCode({ username: verifyUsername.value })
-    info.value = 'Ți-am trimis un cod nou (dacă există un cont neverificat).'
+    const response = await authApi.resendCode({ username: verifyUsername.value })
+    cooldown.start(response.data.retryAfterSeconds ?? 60)
+    info.value = response.data.message ?? 'Codurile pot fi trimise cel mult o dată pe minut.'
   } catch (e) {
     error.value = apiError(e)
   } finally {
@@ -128,11 +133,12 @@ async function doForgot() {
     error.value = 'Introdu adresa de email.'
     return
   }
-  await authApi.forgotPassword({ email: email.value.trim() })
+  const response = await authApi.forgotPassword({ email: email.value.trim() })
+  cooldown.start(response.data.retryAfterSeconds ?? 60)
   resetEmail.value = email.value.trim()
   code.value = ''
   newPassword.value = ''
-  info.value = 'Dacă există un cont cu acest email, ți-am trimis un cod de resetare.'
+  info.value = response.data.message ?? 'Dacă există un cont cu acest email, codul poate fi trimis cel mult o dată pe minut.'
   mode.value = 'reset'
 }
 
@@ -254,8 +260,8 @@ const submitLabel = computed(() => {
         </template>
 
         <template v-else-if="mode === 'verify'">
-          <button @click="resend" :disabled="loading" class="block w-full text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition uppercase tracking-wider disabled:opacity-50">
-            Retrimite codul
+          <button @click="resend" :disabled="loading || retrySeconds > 0" class="block w-full text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition uppercase tracking-wider disabled:opacity-50">
+            {{ retrySeconds > 0 ? `Retrimite codul în ${retrySeconds}s` : 'Retrimite codul' }}
           </button>
           <button @click="go('login')" class="block w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
             Înapoi la conectare

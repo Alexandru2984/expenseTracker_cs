@@ -3,11 +3,12 @@ namespace ExpenseTracker.Api.Models;
 public enum VerificationPurpose
 {
     EmailVerification,
-    PasswordReset
+    PasswordReset,
+    EmailChange
 }
 
 /// <summary>
-/// A short-lived, single-use code emailed to the user. Only the SHA-256 hash of
+/// A short-lived, single-use code emailed to the user. Only a server-keyed MAC of
 /// the code is stored. Brute force is bounded by a per-code attempt counter, a
 /// short expiry, and the strict 'auth' rate limiter on the endpoints.
 /// </summary>
@@ -21,7 +22,7 @@ public class VerificationCode
 
     public VerificationPurpose Purpose { get; set; }
 
-    /// <summary>SHA-256 (base64) of the numeric code.</summary>
+    /// <summary>Server-keyed MAC, bound to the account, inbox and purpose.</summary>
     public string CodeHash { get; set; } = string.Empty;
 
     public DateTime ExpiresAt { get; set; }

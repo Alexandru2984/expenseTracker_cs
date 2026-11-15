@@ -1,5 +1,8 @@
 # Audit și plan de produs — 15 noiembrie 2026
 
+Continuarea privind emailul în așteptare, cooldown-ul persistent și revocarea
+sesiunilor este documentată în [ACCOUNT-SECURITY.md](ACCOUNT-SECURITY.md).
+
 ## Domeniu și metodă
 
 Baseline: `34c92ce`, ASP.NET Core 10 / EF Core / PostgreSQL și Vue 3 / Vite.

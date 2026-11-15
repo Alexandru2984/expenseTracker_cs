@@ -12,6 +12,10 @@ public class User
 
     public bool EmailVerified { get; set; }
 
+    public string? PendingEmail { get; set; }
+
+    public DateTime? VerificationEmailSentAt { get; set; }
+
     public string PasswordHash { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

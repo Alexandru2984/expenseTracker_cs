@@ -105,11 +105,31 @@ public class VerificationServiceTests
         var user = await SeedUser(db);
 
         await Svc(db).IssueAsync(user, VerificationPurpose.EmailVerification);
+        user.VerificationEmailSentAt = DateTime.UtcNow.AddMinutes(-2);
+        await db.SaveChangesAsync();
         await Svc(db).IssueAsync(user, VerificationPurpose.EmailVerification);
 
         var unconsumed = await db.VerificationCodes
             .CountAsync(c => c.UserId == user.Id && c.ConsumedAt == null);
         Assert.Equal(1, unconsumed);
+        Assert.Equal(2, await db.VerificationCodes.CountAsync());
+    }
+
+    [Fact]
+    public async Task Cooldown_does_not_invalidate_the_existing_code_and_is_shared_by_all_purposes()
+    {
+        using var db = NewDb();
+        var user = await SeedUser(db);
+        Assert.True((await Svc(db).IssueAsync(user, VerificationPurpose.EmailVerification)).Sent);
+        var hash = (await db.VerificationCodes.SingleAsync()).CodeHash;
+        db.ChangeTracker.Clear();
+        user = (await db.Users.FindAsync(user.Id))!;
+        var retry = await Svc(db).IssueAsync(user, VerificationPurpose.PasswordReset);
+        Assert.False(retry.Sent);
+        Assert.InRange(retry.RetryAfterSeconds, 1, 60);
+        var saved = await db.VerificationCodes.SingleAsync();
+        Assert.Equal(hash, saved.CodeHash);
+        Assert.Null(saved.ConsumedAt);
     }
 }
 

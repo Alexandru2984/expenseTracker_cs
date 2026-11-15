@@ -74,7 +74,7 @@ public class AuthTokenService
     // a database-only disclosure from enabling an offline dictionary attack.
     public string HashVerificationCode(User user, VerificationPurpose purpose, string code) =>
         "v2:" + Convert.ToBase64String(HMACSHA256.HashData(Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!),
-            Encoding.UTF8.GetBytes($"verification:{user.Id:D}:{purpose}:{user.Email}:{code}")));
+            Encoding.UTF8.GetBytes($"verification:{user.Id:D}:{purpose}:{user.Email}:{(purpose == VerificationPurpose.EmailChange ? user.PendingEmail + ":" : "")}{code}")));
 
     public static string CreateCsrfToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));

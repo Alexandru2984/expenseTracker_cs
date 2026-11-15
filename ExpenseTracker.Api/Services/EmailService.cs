@@ -34,6 +34,9 @@ public class EmailService
             VerificationPurpose.PasswordReset =>
                 ("Cod resetare parolă — Expense Tracker",
                  "Ai cerut resetarea parolei. Folosește codul de mai jos pentru a continua."),
+            VerificationPurpose.EmailChange =>
+                ("Confirmă noua adresă de email — Expense Tracker",
+                 "Ai cerut schimbarea adresei de email. Confirmă noua adresă cu acest cod; adresa curentă rămâne valabilă până la confirmare."),
             _ =>
                 ("Cod verificare cont — Expense Tracker",
                  "Bine ai venit! Confirmă-ți adresa de email folosind codul de mai jos."),

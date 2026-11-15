@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ExpenseTracker.Api.Controllers;
 
 [ApiController, Authorize, Route("api/account/finance-tokens")]
-public sealed class FinanceTokensController(AppDbContext db, IConfiguration config) : ControllerBase
+public sealed class FinanceTokensController(AppDbContext db, IConfiguration config, VerificationService verification) : ControllerBase
 {
     private Guid UserId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
     private bool Enabled => config.GetValue<bool>("FinanceIntegration:Enabled");
@@ -35,6 +35,8 @@ public sealed class FinanceTokensController(AppDbContext db, IConfiguration conf
         if (!Enabled) return NotFound();
         var user = await db.Users.FindAsync(new object[] { UserId }, ct);
         if (user is null) return Unauthorized();
+        await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
+        await verification.LockAccountAsync(user);
         if (!PasswordRules.Verify(request.CurrentPassword, user.PasswordHash))
             return BadRequest(new ProblemDetails { Title = "Parola curentă este incorectă." });
         var now = DateTime.UtcNow;
@@ -45,6 +47,7 @@ public sealed class FinanceTokensController(AppDbContext db, IConfiguration conf
         var row = new RefreshToken { UserId = UserId, TokenHash = FinanceTokens.Hash(raw), ExpiresAt = now.AddDays(request.ValidDays) };
         db.RefreshTokens.Add(row);
         await db.SaveChangesAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return Ok(new { row.Id, token = raw, row.ExpiresAt }); // raw token is shown once only
     }
 

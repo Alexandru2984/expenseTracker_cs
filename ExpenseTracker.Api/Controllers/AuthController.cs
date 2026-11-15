@@ -83,6 +83,7 @@ public class AuthController : ControllerBase
             username = user.Username,
             email = user.Email,
             requiresVerification = true,
+            retryAfterSeconds = VerificationService.EmailCooldownSeconds,
             message = "Cont creat. Ți-am trimis un cod de verificare pe email."
         });
     }
@@ -150,7 +151,8 @@ public class AuthController : ControllerBase
             await _verification.IssueAsync(user, VerificationPurpose.EmailVerification);
 
         // Never reveal whether the account exists / is already verified.
-        return Ok(new { message = "Dacă există un cont neverificat, ți-am trimis un cod nou." });
+        return Ok(new { message = "Dacă există un cont neverificat, un cod poate fi trimis cel mult o dată pe minut.",
+            retryAfterSeconds = VerificationService.EmailCooldownSeconds });
     }
 
     // POST /api/auth/forgot-password — emails a reset code.
@@ -162,7 +164,8 @@ public class AuthController : ControllerBase
         if (user is not null && user.Email is not null)
             await _verification.IssueAsync(user, VerificationPurpose.PasswordReset);
 
-        return Ok(new { message = "Dacă există un cont cu acest email, ți-am trimis un cod de resetare." });
+        return Ok(new { message = "Dacă există un cont cu acest email, un cod poate fi trimis cel mult o dată pe minut.",
+            retryAfterSeconds = VerificationService.EmailCooldownSeconds });
     }
 
     // POST /api/auth/reset-password — sets a new password using the reset code.
@@ -178,8 +181,14 @@ public class AuthController : ControllerBase
 
         var email = dto.Email.Trim().ToLowerInvariant();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
-        if (user is null || !await _verification.ConsumeAsync(user, VerificationPurpose.PasswordReset, dto.Code))
+        if (user is null) return BadRequest(InvalidCode());
+        await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
+        await _verification.LockAccountAsync(user);
+        if (!await _verification.ConsumeAsync(user, VerificationPurpose.PasswordReset, dto.Code))
+        {
+            if (transaction is not null) await transaction.CommitAsync();
             return BadRequest(InvalidCode());
+        }
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         user.EmailVerified = true; // proving control of the inbox also verifies it
@@ -187,11 +196,12 @@ public class AuthController : ControllerBase
 
         // Revoke every active session (logout everywhere) after a password reset.
         var tokens = await _db.RefreshTokens
-            .Where(t => t.UserId == user.Id && t.RevokedAt == null)
+            .Where(t => t.UserId == user.Id && (t.RevokedAt == null || t.WasRotated))
             .ToListAsync();
-        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
+        foreach (var t in tokens) { t.RevokedAt ??= DateTime.UtcNow; t.WasRotated = false; }
 
         await _db.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
         return Ok(new { message = "Parola a fost resetată. Te poți autentifica acum." });
     }
 
@@ -215,26 +225,35 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        // Reuse detection: presenting an already-rotated (revoked) token means the
-        // token was captured and replayed. Treat it as a compromise and revoke
-        // every active session for the user, forcing a fresh login.
-        if (stored.RevokedAt is not null)
-        {
-            var family = await _db.RefreshTokens
-                .Where(t => t.UserId == stored.UserId && t.RevokedAt == null)
-                .ToListAsync();
-            foreach (var t in family) t.RevokedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            _tokens.ClearAuthCookies(Response, Request.IsHttps);
-            return Unauthorized();
-        }
-
-        // Rotate: revoke the presented token, issue a fresh pair.
-        stored.RevokedAt = DateTime.UtcNow;
+        await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
         try
         {
-            await IssueSessionAsync(stored.User);
+            await _verification.LockAccountAsync(stored.User);
+            // Refresh may have waited behind a password change or another tab.
+            await _db.Entry(stored).ReloadAsync();
+            if (DateTime.UtcNow >= stored.ExpiresAt)
+            {
+                _tokens.ClearAuthCookies(Response, Request.IsHttps);
+                return Unauthorized();
+            }
+            if (stored.RevokedAt is not null)
+            {
+                if (stored.WasRotated)
+                {
+                    var family = await _db.RefreshTokens.Where(t => t.UserId == stored.UserId
+                        && (t.RevokedAt == null || t.WasRotated)).ToListAsync();
+                    foreach (var token in family) { token.RevokedAt ??= DateTime.UtcNow; token.WasRotated = false; }
+                    await _db.SaveChangesAsync();
+                    if (transaction is not null) await transaction.CommitAsync();
+                }
+                _tokens.ClearAuthCookies(Response, Request.IsHttps);
+                return Unauthorized();
+            }
+            stored.RevokedAt = DateTime.UtcNow;
+            stored.WasRotated = true;
+            var session = await CreateSessionAsync(stored.User);
+            if (transaction is not null) await transaction.CommitAsync();
+            WriteSession(session);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -257,6 +276,7 @@ public class AuthController : ControllerBase
             if (stored is not null && stored.RevokedAt is null)
             {
                 stored.RevokedAt = DateTime.UtcNow;
+                stored.WasRotated = false;
                 await _db.SaveChangesAsync();
             }
         }
@@ -285,6 +305,15 @@ public class AuthController : ControllerBase
     // Creates+persists a rotating refresh token, writes both auth cookies.
     private async Task IssueSessionAsync(User user)
     {
+        await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
+        await _verification.LockAccountAsync(user);
+        var session = await CreateSessionAsync(user);
+        if (transaction is not null) await transaction.CommitAsync();
+        WriteSession(session);
+    }
+
+    private async Task<(string access, DateTime accessExpires, string refresh, DateTime refreshExpires)> CreateSessionAsync(User user)
+    {
         var (rawRefresh, refreshHash, refreshExpires) = _tokens.CreateRefreshToken();
 
         var session = new RefreshToken
@@ -297,7 +326,8 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
         var (accessToken, accessExpires) = _tokens.CreateAccessToken(user, session.Id);
 
-        _tokens.WriteAuthCookies(Response, Request.IsHttps,
-            accessToken, accessExpires, rawRefresh, refreshExpires);
+        return (accessToken, accessExpires, rawRefresh, refreshExpires);
     }
+    private void WriteSession((string access, DateTime accessExpires, string refresh, DateTime refreshExpires) session) =>
+        _tokens.WriteAuthCookies(Response, Request.IsHttps, session.access, session.accessExpires, session.refresh, session.refreshExpires);
 }

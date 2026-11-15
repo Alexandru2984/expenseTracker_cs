@@ -29,6 +29,7 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
    await page.route('https://analytics.micutu.com/**', route => route.abort());
    let items = Array.from({ length: 13 }, (_, i) => item(`00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, i === 1 ? 'Alpha service' : i === 0 ? 'Long' + 'x'.repeat(96) : `Service ${i + 1}`, i === 12 ? { currency: 'XTS' } : {}));
+   let account = { username: 'dashboard-fixture', email: 'fixture@example.invalid', emailVerified: true, createdAt: new Date().toISOString(), pendingEmail: null, pendingEmailExpiresAt: null, emailRetryAfterSeconds: 0 };
    let posts = 0, slowDone; const slowFinished = new Promise(resolve => { slowDone = resolve; });
    let sessions = [{ id: 'current', isCurrent: true, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }, { id: 'other', isCurrent: false, createdAt: new Date(Date.now() - 86400000).toISOString(), expiresAt: new Date(Date.now() + 86400000).toISOString() }];
    await page.route('**/api/**', async route => {
@@ -37,7 +38,16 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     const byCurrency = [...new Set(active.map(s => s.currency))].map(currency => ({ currency, activeCount: active.filter(s => s.currency === currency).length, monthlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost, 0), yearlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost * 12, 0) }));
     if (url.pathname === '/api/auth/me') data = { username: 'dashboard-fixture' };
     else if (url.pathname === '/api/auth/logout') { status = 204; data = null; }
-    else if (url.pathname === '/api/account') data = { username: 'dashboard-fixture', email: 'fixture@example.invalid', emailVerified: true, createdAt: new Date().toISOString() };
+    else if (url.pathname === '/api/account') data = account;
+    else if (url.pathname === '/api/account/change-email') {
+     account.pendingEmail = request.postDataJSON().email;
+     account.pendingEmailExpiresAt = new Date(Date.now() + 900000).toISOString(); account.emailRetryAfterSeconds = 2;
+     data = { pendingEmail: account.pendingEmail, expiresAt: account.pendingEmailExpiresAt, retryAfterSeconds: 2 };
+    } else if (url.pathname === '/api/account/pending-email') { account.pendingEmail = null; account.pendingEmailExpiresAt = null; status = 204; }
+    else if (url.pathname === '/api/account/confirm-email-change') {
+     if (request.postDataJSON().code !== '123456') { status = 400; data = { title: 'Cod sintetic greșit.' }; }
+     else { account.email = account.pendingEmail; account.pendingEmail = null; account.pendingEmailExpiresAt = null; data = { message: 'Email confirmat.' }; }
+    }
     else if (url.pathname === '/api/account/sessions') data = sessions;
     else if (url.pathname === '/api/account/sessions/other') { sessions = sessions.filter(s => s.id !== 'other'); status = 204; }
     else if (url.pathname === '/api/account/finance-tokens') data = { available: true, tokens: [] };
@@ -111,6 +121,34 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Închide'); checks++;
    await page.getByRole('button', { name: /^Revocă sesiunea din/ }).click();
    await page.getByRole('button', { name: /^Revocă sesiunea din/ }).waitFor({ state: 'detached' }); assert.equal(sessions.length, 1); checks++;
+   await page.getByLabel('Noua adresă de email', { exact: true }).fill('new-inbox@example.invalid');
+   await page.getByLabel('Parola pentru schimbarea emailului', { exact: true }).fill('synthetic-current-password');
+   await page.getByRole('button', { name: 'Trimite codul', exact: true }).click();
+   await page.getByRole('heading', { name: 'Confirmă noua adresă', exact: true }).waitFor();
+   assert.equal(account.email, 'fixture@example.invalid'); checks++;
+   assert.ok(await dialog.getByText('fixture@example.invalid', { exact: true }).isVisible()); checks++;
+   assert.ok(await page.getByRole('button', { name: /Cod nou disponibil în/ }).isDisabled()); checks++;
+   await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
+   await page.getByRole('button', { name: 'Setări cont', exact: true }).click();
+   await page.getByRole('heading', { name: 'Confirmă noua adresă', exact: true }).waitFor();
+   assert.equal(await page.getByLabel('Noua adresă de email', { exact: true }).inputValue(), 'new-inbox@example.invalid'); checks++;
+   const pendingAudit = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+   assert.deepEqual(pendingAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), []); checks++;
+   await noOverflow(); checks++;
+   await page.getByRole('button', { name: 'Anulează schimbarea emailului', exact: true }).click();
+   await page.getByRole('heading', { name: 'Confirmă noua adresă', exact: true }).waitFor({ state: 'detached' });
+   assert.equal(account.email, 'fixture@example.invalid'); checks++;
+   await page.getByLabel('Noua adresă de email', { exact: true }).fill('confirmed-inbox@example.invalid');
+   await page.getByLabel('Parola pentru schimbarea emailului', { exact: true }).fill('synthetic-current-password');
+   await page.getByRole('button', { name: 'Trimite codul', exact: true }).click();
+   await page.getByLabel('Codul pentru noua adresă de email', { exact: true }).fill('000000');
+   await page.getByRole('button', { name: 'Confirmă noul email', exact: true }).click();
+   await page.getByText('Cod sintetic greșit.', { exact: true }).waitFor();
+   assert.equal(await page.getByLabel('Codul pentru noua adresă de email', { exact: true }).inputValue(), '000000'); checks++;
+   await page.getByLabel('Codul pentru noua adresă de email', { exact: true }).fill('123456');
+   await page.getByRole('button', { name: 'Confirmă noul email', exact: true }).click();
+   await page.getByRole('heading', { name: 'Confirmă noua adresă', exact: true }).waitFor({ state: 'detached' });
+   assert.ok(await dialog.getByText('confirmed-inbox@example.invalid', { exact: true }).isVisible()); checks++;
    const settingsAudit = await new AxeBuilder({ page }).include('[role="dialog"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
    assert.deepEqual(settingsAudit.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) })), [], `Settings axe at ${width}/${theme}`); checks++;
    await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
