@@ -61,3 +61,9 @@ verificări browser au trecut la 1440/390/320 px în light/dark, inclusiv persis
 cererii după redeschiderea setărilor, countdown, anulare, eroare și confirmare.
 Datele din probe sunt sintetice; nicio verificare nu trimite emailuri de test către
 utilizatori reali.
+
+Procedura de lansare acceptă explicit `--migrate`. Verifică migrațiile pe backupul
+restaurat, repetă bundle-ul, exercită citirea utilizatorilor cu API-ul vechi și cel
+nou și verifică păstrarea numărului de utilizatori/abonamente. Un eșec în această
+probă oprește lucrul înainte de schimbarea bazei active. Testele PostgreSQL pornesc
+schema prin migrațiile reale, nu prin EnsureCreated.

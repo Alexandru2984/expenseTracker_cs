@@ -20,6 +20,18 @@ Politicile din `ops/security-headers-*.conf` sunt copiate în vhostul aplicație
 snippet-urile shared ale altor site-uri rămân neschimbate. Include verificarea
 health, export anonim, headere și robots/sitemap, cu rollback la eșec.
 
+Pentru o etapă care include migrații revizuite, adaugă explicit `--migrate` la
+comanda scriptului. Fără acest flag, o migrație în așteptare oprește lansarea.
+Scriptul restaurează mai întâi backupul fără rețea publică, aplică bundle-ul de
+două ori pentru a verifica idempotenta și verifică citirea schemei cu imaginile
+API veche și nouă. Abia apoi aplică migrarea forward pe baza activă, înainte de
+schimbarea API-ului. PostgreSQL nu se repornește. Istoricul din DB trebuie să fie
+un prefix al migrațiilor din commit; downgrade-ul automat este refuzat.
+
+Rollbackul aplicației păstrează coloanele aditive; nu rulează Down și nu
+restaurează automat date peste modificările utilizatorilor. Folosește acest flux
+doar pentru migrații compatibile cu versiunea veche, după revizuirea DDL-ului.
+
 SDK-ul acestui proiect este .NET 10. Pe hostul actual există separat la
 `/home/micu/.local/share/finance-dotnet/dotnet`; executabilul implicit al hostului
 este încă .NET 8 pentru alte aplicații. Build-ul Docker folosește propriul SDK 10.

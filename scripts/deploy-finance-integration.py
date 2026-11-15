@@ -20,6 +20,39 @@ def command(args,**kwargs):
     return subprocess.run(args,check=True,**({"stdout":subprocess.PIPE,"stderr":subprocess.PIPE}|kwargs))
 
 
+def migration_history(container,user,database):
+    sql='SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY "MigrationId"'
+    return command(['docker','exec',container,'psql','-h','127.0.0.1','-U',user,'-d',database,'-At','-c',sql],text=True).stdout.splitlines()
+
+
+def migrate_image(image,network,envfile=None):
+    args=['docker','run','--rm','--network',network,'--memory','256m','--pids-limit','128',
+        '--read-only','--tmpfs','/tmp:rw,nosuid,nodev,mode=1777,size=64m']
+    if envfile is not None:args+=['--env-file',str(envfile)]
+    else:args+=['-e','ConnectionStrings__DefaultConnection=Host=127.0.0.1;Database=postgres;Username=postgres']
+    command(args+['--entrypoint','/app/efbundle',image])
+
+
+def probe_api_schema(image,probe,name):
+    """Exercise a real EF user query on the upgraded private database, without creating data."""
+    try:
+        command(['docker','run','-d','--name',name,'--network','container:'+probe,'--memory','256m','--pids-limit','128',
+            '-e','ASPNETCORE_ENVIRONMENT=Testing','-e','ASPNETCORE_URLS=http://127.0.0.1:18080',
+            '-e','Jwt__Secret=migration-probe-key-at-least-32-characters',
+            '-e','ConnectionStrings__DefaultConnection=Host=127.0.0.1;Database=postgres;Username=postgres',image])
+        for _ in range(60):
+            ready=subprocess.run(['docker','exec',name,'wget','-qO-','-T','1','http://127.0.0.1:18080/health'],capture_output=True)
+            if ready.returncode==0:break
+            time.sleep(.1)
+        else:raise RuntimeError('Schema compatibility API probe did not become ready')
+        result=subprocess.run(['docker','exec',name,'wget','-S','-O','/dev/null','-T','5','--header','Content-Type: application/json',
+            '--post-data',json.dumps({'username':'migration_probe_'+os.urandom(8).hex(),'password':'synthetic-missing-user-password'}),
+            'http://127.0.0.1:18080/api/auth/login'],capture_output=True,text=True)
+        if not re.search(r'HTTP/\d(?:\.\d)?\s+401\b',result.stderr):
+            raise RuntimeError('Old/new API user query failed against the upgraded schema')
+    finally:subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+
 def with_security_headers(config):
     """Embed reviewed app-specific policies; shared host snippets stay unchanged."""
     spa=(ROOT/'ops/security-headers-spa.conf').read_text().strip()
@@ -46,7 +79,9 @@ def with_security_headers(config):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--image',required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--image',required=True)
+    parser.add_argument('--migrate',action='store_true',help='Apply reviewed forward migrations, after an isolated restore and compatibility drill')
+    args=parser.parse_args()
     if os.geteuid()!=0:raise SystemExit('Run with sudo')
     git=['git','-c','safe.directory='+str(ROOT)]
     if command(git+['status','--porcelain'],cwd=ROOT,text=True).stdout.strip():
@@ -75,6 +110,14 @@ def main():
     fields={key.strip().lower():value.strip() for part in lexer if '=' in part for key,value in [part.split('=',1)]}
     if fields.get('host')!='db' or fields.get('database')!=db_env.get('POSTGRES_DB'):
         raise RuntimeError('Live database identity does not match the backup source; review before deploying')
+    expected=sorted(path.stem for path in (ROOT/'ExpenseTracker.Api/Migrations').glob('*.cs')
+        if re.fullmatch(r'\d{14}_[A-Za-z0-9_]+',path.stem))
+    before=migration_history('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB'])
+    if not expected or before!=expected[:len(before)]:
+        raise SystemExit('Database migration history is not a prefix of the reviewed source; refusing downgrade or unknown migrations')
+    pending=before!=expected
+    if pending and not args.migrate:
+        raise SystemExit('Reviewed database migrations are pending; use --migrate to verify them in isolation before applying')
     old_image=active[0]['Image']
     rollback='expensetracker_cs-api:rollback-'+stamp
     command(['docker','image','tag',old_image,rollback])
@@ -102,6 +145,17 @@ def main():
         counts=command(['docker','exec',probe,'psql','-h','127.0.0.1','-U','postgres','-d','postgres','-At','-c','SELECT json_build_object(\'users\',(SELECT COUNT(*) FROM "Users"),\'subscriptions\',(SELECT COUNT(*) FROM "Subscriptions"))'],text=True).stdout.strip()
         json.loads(counts)
         print('Verified PostgreSQL backup restored in isolation; table counts:',counts)
+        if pending:
+            migrate_image(candidate_id,'container:'+probe)
+            if migration_history(probe,'postgres','postgres')!=expected:raise RuntimeError('Isolated migration history did not reach the reviewed target')
+            migrate_image(candidate_id,'container:'+probe) # idempotence, not a second schema change
+            probe_api_schema(old_image,probe,'expense-old-schema-probe-'+stamp.lower())
+            probe_api_schema(candidate_id,probe,'expense-new-schema-probe-'+stamp.lower())
+            after_counts=command(['docker','exec',probe,'psql','-h','127.0.0.1','-U','postgres','-d','postgres','-At','-c',
+                'SELECT json_build_object(\'users\',(SELECT COUNT(*) FROM "Users"),\'subscriptions\',(SELECT COUNT(*) FROM "Subscriptions"))'],text=True).stdout.strip()
+            if json.loads(counts)!=json.loads(after_counts):raise RuntimeError('Migration drill changed user/subscription row counts')
+            (state/'migration-drill.json').write_text(json.dumps({'before':before,'after':expected,'oldApiCompatible':True,'newApiCompatible':True,'idempotent':True}))
+            print('Verified forward migrations, idempotence and old/new API compatibility on the restored database')
     finally:subprocess.run(['docker','rm','-f',probe],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if any(path.is_symlink() for path in frontend.rglob('*')):raise RuntimeError('Symlinks are not allowed in public artifacts')
     revision=command(['git','-c','safe.directory='+str(ROOT),'rev-parse','--short','HEAD'],cwd=ROOT,text=True).stdout.strip()
@@ -118,9 +172,22 @@ def main():
             if status=='healthy':break
             time.sleep(.5)
         else:raise RuntimeError('New API did not become healthy')
+    api_changed=False
+    nginx_changed=False
     try:
+        if pending:
+            networks=set(active[0]['NetworkSettings']['Networks']) & set(active[1]['NetworkSettings']['Networks'])
+            if len(networks)!=1:raise RuntimeError('Expected exactly one shared API/database network')
+            connection=api_env['ConnectionStrings__DefaultConnection']
+            if '\n' in connection or '\r' in connection:raise RuntimeError('Unexpected newline in database connection configuration')
+            migration_env=state/'migration.env';migration_env.write_text('ConnectionStrings__DefaultConnection='+connection+'\n');migration_env.chmod(0o600)
+            migrate_image(candidate_id,next(iter(networks)),migration_env)
+            if migration_history('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB'])!=expected:
+                raise RuntimeError('Live migration history differs from the verified target')
+            print('Reviewed forward migrations applied; database service was not restarted')
         lines=[line for line in old_env.decode().splitlines() if not line.startswith('FinanceIntegration__Enabled=')]
         envfile.write_text('\n'.join(lines)+'\nFinanceIntegration__Enabled=true\n');envfile.chmod(0o600)
+        api_changed=True
         activate_image(candidate_id)
         config=old_nginx.decode()
         blocks=list(re.finditer(r'location\s+/\s*\{([^{}]*)\}',config))
@@ -147,6 +214,7 @@ def main():
             config=config.replace('include snippets/robots.conf;',robots,1)
         else:raise RuntimeError('Expected app robots location or shared snippet was not found')
         config=with_security_headers(config)
+        nginx_changed=True
         nginx.write_text(config)
         command(['nginx','-t']);command(['systemctl','reload','nginx'])
         # Check the actual origin vhost, not a successful reload signal alone.
@@ -167,9 +235,10 @@ def main():
             if values!=[value]:raise RuntimeError('Expected one authoritative security header: '+name)
         print('C# API and immutable UI activated:',revision,'; backup and rollback metadata:',state)
     except BaseException:
-        envfile.write_bytes(old_env);nginx.write_bytes(old_nginx)
-        activate_image(rollback)
-        command(['nginx','-t']);command(['systemctl','reload','nginx'])
+        envfile.write_bytes(old_env)
+        if nginx_changed:nginx.write_bytes(old_nginx)
+        if api_changed:activate_image(rollback)
+        if nginx_changed:command(['nginx','-t']);command(['systemctl','reload','nginx'])
         raise
 
 

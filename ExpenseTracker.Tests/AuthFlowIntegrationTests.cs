@@ -51,7 +51,8 @@ public class TestApiFactory : WebApplicationFactory<Program>
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         // Only the explicitly supplied disposable test database is initialized.
-        db.Database.EnsureCreated();
+        if (db.Database.IsRelational()) db.Database.Migrate();
+        else db.Database.EnsureCreated();
         return host;
     }
 }
