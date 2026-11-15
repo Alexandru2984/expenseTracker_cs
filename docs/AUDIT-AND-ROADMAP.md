@@ -295,3 +295,32 @@ cont cu revizuire manuală; note/link furnizor și perioade de probă; obiective
 economisire persistente; outbox SMTP și notificări cu opt-in/fus orar. MFA/passkeys,
 alertarea externă și backupul off-site rămân priorități de securitate/operare.
 Aceste puncte sunt planificate, nu declarate implementate.
+
+## Lansare login și istoric verificată
+
+Cod activ: `ca3d806478a45225a31e08932a794236a306a028`, imagine
+`expensetracker_cs-api:release-ca3d806478a45225a31e08932a794236a306a028`.
+Backupul și rollback-ul sunt private în
+`/var/backups/expense-tracker/deploy-20261115T182954Z`.
+
+Restaurare izolată reușită, 8 → 10 migrații, bundle repetat fără schimbări, API vechi
+și nou compatibile cu schema extinsă. Numărul de conturi/abonamente s-a păstrat în
+probă (0/0 la snapshotul backupului). Migrațiile sunt aditive: trei coloane Users,
+indexul unic case-insensitive și tabela SubscriptionPriceChanges cu index/FK.
+Nu s-au rescris prețuri, reconstruit evenimente istorice sau redenumit conturi.
+Istoricul din baza activă confirmă toate cele 10 migrații. StartedAt al containerului
+PostgreSQL este identic înainte/după lansare. API healthy, zero restarturi.
+
+Verificările prin domeniul public: health 200; bugete, istoric propriu și export/
+istoric Finance anonime 401, cu no-store și un singur X-Frame-Options: DENY. Revizia
+UI coincide cu imaginea; CSP nonce diferit pe două răspunsuri HTML. Chromium la
+390 px nu arată overflow, erori JavaScript sau CSP. Proba F# HttpClient confirmă
+401/no-store pentru snapshotul existent și noua resursă de istoric, fără token.
+Scenariile autentificate au folosit date sintetice pe PostgreSQL temporar și API
+sintetic în browser; nu s-au creat conturi sau trimis emailuri de test în producție.
+
+Validare finală: 136 teste backend fără skip, 339 execuții de aserțiuni dashboard
+în trei loturi desktop/mobil light/dark și 24 verificări Finance pe buildul final.
+Configurația nginx activă este reflectată în ops. Sursa și artefactele au fost
+construite din același commit; documentarea ulterioară nu schimbă codul activ.
+Nu s-a făcut push și nu se declară o rulare CI remote.

@@ -63,8 +63,15 @@ active și îl restaurează integral într-un container PostgreSQL separat făr�
 Frontendul este copiat root-owned în `/opt/expense-tracker/releases/`, iar nginx este verificat
 înainte de reload și prin răspunsul efectiv. API-ul vechi este păstrat ca imagine de rollback.
 Un eșec restabilește imaginea/configurația, fără restaurarea automată a datelor clientului.
-Nu rulează migrații pe baza de producție pentru această integrare (schema rămâne aceeași).
+Conectorul inițial nu a necesitat migrații. Extinderea cu istoric necesită migrația
+aditivă descrisă în PRICE-HISTORY; folosește `--migrate`, cu restore drill și probe
+de compatibilitate, conform [deploy.md](../deploy.md).
 
-Verificare: 35 teste backend, 24 verificări UI/WCAG pe desktop/390/320 px, build Vite 8 și
+Verificare inițială a conectorului: 35 teste backend, 24 verificări UI/WCAG pe desktop/390/320 px, build Vite 8 și
 auditurile NuGet/npm fără advisories cunoscute în sursele consultate. CI include testul
 panoului pe API sintetic, separat de testele de autentificare reale cu WebApplicationFactory.
+
+Runda cu istoric: 136 teste backend pe PostgreSQL prin migrații, 339 execuții de
+aserțiuni dashboard în trei loturi light/dark și 24 verificări ale panoului Finance.
+Proba F# HttpClient pe domeniul public confirmă autorizarea obligatorie/no-store
+pentru snapshot și istoric. Rezultatele nu implică modificarea aplicației F# externe.

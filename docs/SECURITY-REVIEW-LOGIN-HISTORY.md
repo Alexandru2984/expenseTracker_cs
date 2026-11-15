@@ -65,3 +65,20 @@ Verdict tehnic: remediere și verificare înainte de lansare. Criterii: teste re
 PostgreSQL, izolare între conturi, compatibilitate Finance, UI mobil/accesibilitate,
 backup restaurat, migrații idempotente și API vechi/nou compatibile. Lipsa alertării
 externe și riscul rezidual de blocare abuzivă rămân consemnate.
+
+## Rezultatul exercițiului tehnic și al lansării
+
+15.11.2026: 136 teste backend pe PostgreSQL prin migrații, fără skip. Scenariul
+de blocare a confirmat contor comun, termen nemodificat la trafic și sesiune
+existentă funcțională. Recuperarea cu cod greșit a păstrat blocarea; codul valid a
+permis login cu noua parolă. Înregistrările concurente au produs un singur cont
+și un răspuns 409. Un al doilea context cu preț vechi a pierdut editarea, fără
+eveniment rezidual; retry-ul după reload a produs exact următorul eveniment.
+Accesul străin și tokenurile revocate/expirate au fost respinse.
+
+La lansare, backupul a fost restaurat fără rețea publică, bundle-ul repetat și
+imaginile API veche/nouă probate pe schema extinsă. Numărul de conturi/abonamente
+s-a păstrat; DB activă nu a fost restartată. Endpointurile publice au respins
+cererile fără token și au păstrat no-store. Criteriile tehnice ale acestei lansări
+au trecut; nu se declară testat răspunsul uman/on-call sau configurată alertarea
+externă. Dovezi și revizia activă: [audit](AUDIT-AND-ROADMAP.md).
