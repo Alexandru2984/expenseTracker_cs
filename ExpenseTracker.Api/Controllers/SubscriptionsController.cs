@@ -92,6 +92,9 @@ public class SubscriptionsController : ControllerBase
     }
 
     // GET /api/subscriptions/export
+    [HttpGet("rates/status"), AllowAnonymous]
+    public async Task<IActionResult> GetRatesStatus() => Ok(await _currencyService.GetSnapshotAsync());
+
     [HttpGet("export")]
     public async Task<IActionResult> ExportCsv()
     {
@@ -283,6 +286,36 @@ public class SubscriptionsController : ControllerBase
     }
 
     // GET /api/subscriptions/summary
+    [HttpGet("insights")]
+    public async Task<IActionResult> GetInsights(CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var items = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId).Take(5001).ToListAsync(ct);
+        if (items.Count > 5000) return StatusCode(413, new ProblemDetails { Title = "Analiza acceptă maximum 5000 de abonamente." });
+        return Ok(SubscriptionInsights.Build(items, DateOnly.FromDateTime(DateTime.UtcNow)));
+    }
+
+    [HttpGet("calendar")]
+    public async Task<IActionResult> ExportCalendar(CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var items = await _db.Subscriptions.AsNoTracking().Where(s => s.UserId == userId && s.IsActive)
+            .OrderBy(s => s.NextBillingDate).ThenBy(s => s.Id).Take(5001).ToListAsync(ct);
+        if (items.Count > 5000) return StatusCode(413, new ProblemDetails { Title = "Calendarul acceptă maximum 5000 de abonamente." });
+        return File(CalendarExport.Build(items, DateTime.UtcNow), "text/calendar; charset=utf-8", "abonamente.ics");
+    }
+
+    [HttpPost("{id:guid}/status"), EnableRateLimiting("writes")]
+    public async Task<IActionResult> SetStatus(Guid id, [FromBody] SubscriptionStatusDto dto, CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var item = await _db.Subscriptions.SingleOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
+        if (item is null) return NotFound();
+        item.IsActive = dto.IsActive!.Value;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ToDto(item));
+    }
+
     [HttpGet("summary")]
     public async Task<IActionResult> GetSummary()
     {

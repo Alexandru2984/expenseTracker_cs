@@ -30,6 +30,32 @@ public class AccountController : ControllerBase
     private Guid GetUserId() =>
         Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : Guid.Empty;
 
+    [HttpGet("sessions")]
+    public async Task<IActionResult> Sessions(CancellationToken ct)
+    {
+        var userId = GetUserId();
+        Guid.TryParse(User.FindFirstValue("session_id"), out var currentId);
+        var now = DateTime.UtcNow;
+        var sessions = await _db.RefreshTokens.AsNoTracking()
+            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > now && !t.TokenHash.StartsWith("finance:"))
+            .OrderByDescending(t => t.CreatedAt)
+            .Select(t => new { t.Id, t.CreatedAt, t.ExpiresAt, isCurrent = t.Id == currentId }).Take(100).ToListAsync(ct);
+        return Ok(sessions);
+    }
+
+    [HttpDelete("sessions/{id:guid}"), EnableRateLimiting("writes")]
+    public async Task<IActionResult> RevokeSession(Guid id, CancellationToken ct)
+    {
+        var userId = GetUserId();
+        var session = await _db.RefreshTokens.SingleOrDefaultAsync(t => t.Id == id && t.UserId == userId
+            && !t.TokenHash.StartsWith("finance:"), ct);
+        if (session is null) return NotFound();
+        session.RevokedAt ??= DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        if (User.FindFirstValue("session_id") == id.ToString()) _tokens.ClearAuthCookies(Response, Request.IsHttps);
+        return NoContent();
+    }
+
     // GET /api/account
     [HttpGet]
     public async Task<IActionResult> Get()

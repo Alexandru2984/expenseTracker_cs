@@ -28,6 +28,9 @@ Funcționalități principale:
 - Totaluri lunare și anuale **per valută** (RON, EUR, USD…), curs valutar live + estimare totală
 - Grafice (categorii + cheltuieli pe valută), badge-uri „scadent curând", export **și** import CSV
 - Temă luminoasă/întunecată, responsive mobile-first, instalabilă ca PWA (offline app shell)
+- Prognoză pe 6 luni, calendar al plăților, export .ics și simulator de economii
+- Suspendare/reactivare, duplicare prin formular și gestionarea sesiunilor active
+- Grafice pe întregul cont și sursa cursului valutar afișată explicit
 
 ---
 
@@ -146,6 +149,11 @@ necesită header `X-CSRF-Token` egal cu cookie-ul `csrf_token` (double-submit). 
 | `GET` | `/api/subscriptions/export` | Export CSV |
 | `POST` | `/api/subscriptions/import` | Import CSV |
 | `GET` | `/api/subscriptions/rates` | Curs valutar live |
+| `GET` | `/api/subscriptions/rates/status` | Cursuri + sursă live/fallback și data preluării |
+| `GET` | `/api/subscriptions/insights` | Prognoză, categorii, plăți viitoare, scadențe vechi și economii |
+| `GET` | `/api/subscriptions/calendar` | Export ICS al următoarelor scadențe salvate |
+| `POST` | `/api/subscriptions/{id}/status` | Suspendare/reactivare (`{ isActive: false/true }`) |
+| `GET` / `DELETE` | `/api/account/sessions[/{id}]` | Listare/revocare sesiuni proprii |
 
 ---
 

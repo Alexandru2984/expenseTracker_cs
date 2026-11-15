@@ -3,10 +3,11 @@ defineProps({
   subscriptions: {
     type: Array,
     required: true
-  }
+  },
+  pendingIds: { type: Set, default: () => new Set() }
 })
 
-const emit = defineEmits(['edit', 'delete'])
+const emit = defineEmits(['edit', 'delete', 'status', 'duplicate'])
 
 const CATEGORY_COLORS = {
   Streaming: 'bg-pink-500/15 text-pink-600 dark:text-pink-300',
@@ -53,16 +54,16 @@ function dueInfo(sub) {
   </div>
 
   <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
-    <div
+    <article
       v-for="sub in subscriptions"
       :key="sub.id"
       class="bg-white dark:bg-gray-900 border rounded-2xl p-5 flex flex-col gap-3 transition hover:border-indigo-500/50 shadow-sm"
-      :class="sub.isActive ? 'border-gray-100 dark:border-gray-800' : 'border-gray-100 dark:border-gray-800 opacity-60'"
+      :class="sub.isActive ? 'border-gray-100 dark:border-gray-800' : 'border-dashed border-gray-300 dark:border-gray-600'"
     >
       <!-- Header -->
       <div class="flex items-start justify-between gap-2">
-        <div>
-          <h3 class="font-bold text-gray-900 dark:text-white text-base leading-tight">{{ sub.name }}</h3>
+        <div class="min-w-0">
+          <h3 class="font-bold text-gray-900 dark:text-white text-base leading-tight break-words">{{ sub.name }}</h3>
           <span
             v-if="sub.category"
             class="inline-block mt-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold"
@@ -75,19 +76,19 @@ function dueInfo(sub) {
           class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold shrink-0"
           :class="sub.isActive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'"
         >
-          {{ sub.isActive ? 'Activ' : 'Inactiv' }}
+          {{ sub.isActive ? 'Activ' : 'Suspendat' }}
         </span>
       </div>
 
       <!-- Cost -->
-      <div class="flex items-baseline gap-1">
-        <span class="text-2xl font-black text-gray-900 dark:text-white">{{ sub.cost.toFixed(2) }}</span>
+      <div class="flex flex-wrap items-baseline gap-1">
+        <span class="text-2xl font-black text-gray-900 dark:text-white break-all">{{ sub.cost.toFixed(2) }}</span>
         <span class="text-xs font-bold text-gray-400">{{ sub.currency }}</span>
         <span class="text-[10px] font-bold text-gray-400 uppercase ml-1">/ {{ sub.billingPeriod === 'Monthly' ? 'lună' : 'an' }}</span>
       </div>
 
       <!-- Next billing -->
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="text-[11px] text-gray-400 font-medium">
           Următoarea plată: <span class="text-gray-700 dark:text-gray-300">{{ formatDate(sub.nextBillingDate) }}</span>
         </div>
@@ -97,20 +98,28 @@ function dueInfo(sub) {
       </div>
 
       <!-- Actions -->
+      <div class="flex flex-wrap gap-2">
+        <button type="button" :disabled="pendingIds.has(sub.id)" @click="emit('status', sub)" :aria-label="`${sub.isActive ? 'Suspendă' : 'Reactivează'} ${sub.name}`" class="flex-1 text-xs font-semibold rounded-xl px-3 py-2.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 disabled:opacity-50">{{ sub.isActive ? 'Suspendă' : 'Reactivează' }}</button>
+        <button type="button" :disabled="pendingIds.has(sub.id)" @click="emit('duplicate', sub)" :aria-label="`Duplică ${sub.name}`" class="flex-1 text-xs font-semibold rounded-xl px-3 py-2.5 text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 disabled:opacity-50">Duplică</button>
+      </div>
       <div class="flex gap-2 pt-1 mt-auto">
         <button
           @click="emit('edit', sub)"
+          :disabled="pendingIds.has(sub.id)"
+          :aria-label="`Editează ${sub.name}`"
           class="flex-1 text-xs font-bold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white py-2 rounded-xl transition"
         >
           Editează
         </button>
         <button
           @click="emit('delete', sub.id)"
+          :disabled="pendingIds.has(sub.id)"
+          :aria-label="`Șterge ${sub.name}`"
           class="flex-1 text-xs font-bold bg-red-500/5 dark:bg-red-500/10 hover:bg-red-500/10 dark:hover:bg-red-500/20 text-red-500 py-2 rounded-xl transition"
         >
           Șterge
         </button>
       </div>
-    </div>
+    </article>
   </div>
 </template>

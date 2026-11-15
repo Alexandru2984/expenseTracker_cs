@@ -67,6 +67,8 @@ try
 
     // ── Services ──────────────────────────────────────────────────────────────
     builder.Services.AddHttpClient();
+    builder.Services.AddHttpClient("CurrencyRates", client => client.MaxResponseContentBufferSize = 512_000)
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
     builder.Services.AddMemoryCache();
     builder.Services.AddScoped<CurrencyService>();
     builder.Services.AddSingleton<AuthTokenService>();

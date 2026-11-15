@@ -5,7 +5,9 @@ const props = defineProps({
   editingItem: {
     type: Object,
     default: null
-  }
+  },
+  initialItem: { type: Object, default: null },
+  busy: Boolean
 })
 
 const emit = defineEmits(['submit', 'cancel'])
@@ -23,7 +25,7 @@ const empty = () => ({
 const form = ref(empty())
 
 watch(
-  () => props.editingItem,
+  () => props.editingItem ?? props.initialItem,
   (item) => {
     if (item) {
       form.value = {
@@ -38,27 +40,30 @@ watch(
 )
 
 function handleSubmit() {
+  if (props.busy) return
   const payload = {
     ...form.value,
     cost: parseFloat(form.value.cost),
     nextBillingDate: form.value.nextBillingDate  // DateOnly: YYYY-MM-DD
   }
   emit('submit', payload)
-  form.value = empty()
 }
 </script>
 
 <template>
-  <div class="bg-white dark:bg-gray-900 rounded-3xl p-6 border border-gray-100 dark:border-gray-800 shadow-xl shadow-indigo-500/5">
+  <div id="subscription-form" class="bg-white dark:bg-gray-900 rounded-3xl p-5 sm:p-6 border border-gray-100 dark:border-gray-800 shadow-xl shadow-indigo-500/5">
     <h2 class="text-xl font-bold dark:text-white mb-6">
       {{ editingItem ? 'Editează abonament' : 'Abonament nou' }}
     </h2>
 
-    <form @submit.prevent="handleSubmit" class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+    <form @submit.prevent="handleSubmit">
+      <fieldset :disabled="busy" class="grid grid-cols-1 sm:grid-cols-2 gap-5">
       <!-- Name -->
       <div class="sm:col-span-2">
-        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Nume</label>
+        <label for="subscription-name" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Nume</label>
         <input
+          id="subscription-name"
+          maxlength="100"
           v-model="form.name"
           required
           placeholder="Netflix, Spotify, VPS..."
@@ -68,8 +73,10 @@ function handleSubmit() {
 
       <!-- Cost -->
       <div>
-        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Cost</label>
+        <label for="subscription-cost" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Cost</label>
         <input
+          id="subscription-cost"
+          max="1000000"
           v-model="form.cost"
           type="number"
           step="0.01"
@@ -82,8 +89,9 @@ function handleSubmit() {
 
       <!-- Currency -->
       <div>
-        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Valută</label>
+        <label for="subscription-currency" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Valută</label>
         <select
+          id="subscription-currency"
           v-model="form.currency"
           class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white outline-none focus:ring-2 ring-indigo-500/20 transition"
         >
@@ -97,8 +105,9 @@ function handleSubmit() {
 
       <!-- Billing Period -->
       <div>
-        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Frecvență</label>
+        <label for="subscription-period" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Frecvență</label>
         <select
+          id="subscription-period"
           v-model="form.billingPeriod"
           class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white outline-none focus:ring-2 ring-indigo-500/20 transition"
         >
@@ -109,8 +118,11 @@ function handleSubmit() {
 
       <!-- Next Billing Date -->
       <div>
-        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Următoarea plată</label>
+        <label for="subscription-date" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Următoarea plată</label>
         <input
+          id="subscription-date"
+          min="1900-01-01"
+          max="9998-12-31"
           v-model="form.nextBillingDate"
           type="date"
           required
@@ -120,8 +132,10 @@ function handleSubmit() {
 
       <!-- Category -->
       <div>
-        <label class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Categorie</label>
+        <label for="subscription-category" class="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1.5 ml-1">Categorie</label>
         <input
+          id="subscription-category"
+          maxlength="100"
           v-model="form.category"
           placeholder="Streaming, SaaS..."
           class="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4 py-2.5 dark:text-white placeholder-gray-400 outline-none focus:ring-2 ring-indigo-500/20 transition"
@@ -145,10 +159,9 @@ function handleSubmit() {
           type="submit"
           class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
         >
-          {{ editingItem ? 'Salvează modificările' : 'Adaugă abonament' }}
+          {{ busy ? 'Se salvează…' : editingItem ? 'Salvează modificările' : 'Adaugă abonament' }}
         </button>
         <button
-          v-if="editingItem"
           type="button"
           @click="emit('cancel')"
           class="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold py-3 rounded-xl transition"
@@ -156,6 +169,7 @@ function handleSubmit() {
           Anulează
         </button>
       </div>
+      </fieldset>
     </form>
   </div>
 </template>

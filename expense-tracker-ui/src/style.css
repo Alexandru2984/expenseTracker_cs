@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .panel { @apply bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm; }
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: 7rem; }
+body { overflow-wrap: anywhere; }
+/* Muted text and status badges remain readable in both themes. */
+.text-gray-400, .text-gray-500 { color: #596273; }
+.dark .text-gray-400, .dark .text-gray-500 { color: #a3adbd; }
+.text-emerald-600 { color: #047857; }
+.text-amber-600 { color: #92400e; }
+.text-red-500 { color: #b91c1c; }
+.dark .text-red-500 { color: #fca5a5; }
+button, a, input, select, summary { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid #818cf8; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

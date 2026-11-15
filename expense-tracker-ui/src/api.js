@@ -2,6 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
+  timeout: 15_000,
   withCredentials: true // send/receive the httpOnly auth cookies
 })
 
@@ -26,7 +27,17 @@ api.interceptors.request.use(config => {
 let refreshPromise = null
 function refreshSession() {
   if (!refreshPromise) {
-    refreshPromise = api.post('/auth/refresh').finally(() => { refreshPromise = null })
+    const rotate = async () => {
+      // A different tab may already have refreshed the shared cookies while we
+      // waited for the lock. Recheck before rotating a single-use token again.
+      try { await api.get('/auth/me', { _skipRefresh: true }); return }
+      catch (error) { if (error.response?.status !== 401) throw error }
+      await api.post('/auth/refresh')
+    }
+    const operation = navigator.locks?.request
+      ? navigator.locks.request('expense-session-refresh', rotate)
+      : api.post('/auth/refresh')
+    refreshPromise = operation.finally(() => { refreshPromise = null })
   }
   return refreshPromise
 }
@@ -38,9 +49,9 @@ api.interceptors.response.use(
     const original = err.config
     const status = err.response?.status
     const url = original?.url ?? ''
-    const isAuthCall = /\/auth\/(login|register|refresh|logout)/.test(url)
+    const isAuthCall = /\/auth\/(login|register|refresh|logout|verify-email|resend-code|forgot-password|reset-password)/.test(url)
 
-    if (status === 401 && original && !original._retry && !isAuthCall) {
+    if (status === 401 && original && !original._retry && !original._skipRefresh && !isAuthCall) {
       original._retry = true
       try {
         await refreshSession()
@@ -51,7 +62,7 @@ api.interceptors.response.use(
       }
     }
 
-    if (status === 401 && !isAuthCall) {
+    if (status === 401 && !isAuthCall && !original?._skipRefresh) {
       window.dispatchEvent(new Event('auth:logout'))
     }
     return Promise.reject(err)
@@ -73,7 +84,9 @@ export const accountApi = {
   get: () => api.get('/account'),
   changePassword: (data) => api.post('/account/change-password', data),
   changeEmail: (data) => api.post('/account/change-email', data),
-  logoutAll: () => api.post('/account/logout-all')
+  logoutAll: () => api.post('/account/logout-all'),
+  sessions: () => api.get('/account/sessions'),
+  revokeSession: (id) => api.delete(`/account/sessions/${encodeURIComponent(id)}`)
 }
 
 export const financeIntegrationApi = {
@@ -90,6 +103,10 @@ export const subscriptionsApi = {
   remove: (id) => api.delete(`/subscriptions/${id}`),
   getSummary: () => api.get('/subscriptions/summary'),
   getRates: () => api.get('/subscriptions/rates'),
+  getRatesStatus: () => api.get('/subscriptions/rates/status'),
+  getInsights: () => api.get('/subscriptions/insights'),
+  setStatus: (id, isActive) => api.post(`/subscriptions/${encodeURIComponent(id)}/status`, { isActive }),
+  exportCalendar: () => api.get('/subscriptions/calendar', { responseType: 'blob' }),
   exportCsv: () => api.get('/subscriptions/export', { responseType: 'blob' }),
   importCsv: (formData) => api.post('/subscriptions/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

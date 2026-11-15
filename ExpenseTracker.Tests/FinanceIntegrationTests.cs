@@ -140,4 +140,23 @@ public class FinanceIntegrationTests(TestApiFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized,(await client.PostAsync("/api/auth/refresh",null)).StatusCode);
         Assert.Equal(HttpStatusCode.OK,(await WithToken(token).GetAsync("/api/integrations/finance/subscriptions")).StatusCode);
     }
+
+    [Fact]
+    public async Task Pausing_a_subscription_updates_the_existing_Finance_snapshot_contract()
+    {
+        var (owner, _) = await Account();
+        var created = await owner.PostAsJsonAsync("/api/subscriptions", new { name="Finance planning", cost=120,
+            currency="EUR", billingPeriod="Yearly", nextBillingDate="2027-01-31" });
+        created.EnsureSuccessStatusCode();
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var (token, _) = await Grant(owner);
+        (await owner.PostAsJsonAsync($"/api/subscriptions/{id}/status", new { isActive=false })).EnsureSuccessStatusCode();
+        var snapshot = await WithToken(token).GetFromJsonAsync<JsonElement>("/api/integrations/finance/subscriptions");
+        Assert.Equal(1, snapshot.GetProperty("schemaVersion").GetInt32());
+        var subscription = snapshot.GetProperty("subscriptions")[0];
+        Assert.Equal(id, subscription.GetProperty("sourceId").GetGuid());
+        Assert.False(subscription.GetProperty("isActive").GetBoolean());
+        Assert.Equal("Yearly", subscription.GetProperty("billingPeriod").GetString());
+        Assert.Equal(120m, subscription.GetProperty("cost").GetDecimal());
+    }
 }

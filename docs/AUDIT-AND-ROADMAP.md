@@ -107,3 +107,24 @@ testele au folosit exclusiv conturi sintetice în baze temporare.
   `pg_isready` observa serverul temporar de initdb, apoi `pg_restore` întâlnea
   oprirea lui. Reprodus în container separat; readiness/restore folosesc acum TCP
   loopback, disponibil numai pe serverul final. Backupul și rollbackul rămân obligatorii.
+
+- Etapa 4: dashboard cu indicatori activ/suspendat/scadent, agregări pe întregul
+  cont, prognoză pe 6 luni cu plățile anuale în luna scadentă, următoarele 30 de
+  zile și scadențe vechi separate. Calculul păstrează ziua de ancoră în proiecție
+  și gestionează anii bisecți; nu înregistrează automat plăți sau schimbări de dată.
+  Calendarul ICS exportă o singură scadență salvată per abonament activ, cu escaping
+  și împărțirea liniilor după octeți UTF-8 conform RFC 5545. Simulatorul de economii
+  păstrează valutele separate și nu modifică datele. Suspendare/reactivare
+  idempotentă, duplicare prin formular cu confirmarea utilizatorului, listă/revocare
+  a sesiunilor proprii fără secrete expuse. Contract Finance schemaVersion 1 păstrat;
+  suspendarea este vizibilă în snapshot prin isActive.
+  Cursurile afișează explicit sursa live/fallback, rezultatele sunt validate și
+  cache-uite inclusiv la eroare; valutele fără curs sunt excluse și semnalate.
+  Filtrare cu debounce și protecție la răspunsuri întârziate, resetarea datelor la
+  logout, formulare păstrate la eroare și protecție la dublu submit. Web Locks
+  coordonează refresh-ul între taburi când browserul le oferă; fallbackul oferă
+  deduplicare în același tab. Focus în dialog, Escape, revenire focus și contrast
+  corectate. 121 verificări browser la 1440/390/320 px în light/dark, inclusiv WCAG
+  automat, concurență între două taburi și zero erori JavaScript în scenariile testate.
+
+Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).

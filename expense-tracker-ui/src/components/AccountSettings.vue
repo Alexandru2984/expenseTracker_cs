@@ -1,10 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import FinanceIntegrationPanel from './FinanceIntegrationPanel.vue'
+import SessionPanel from './SessionPanel.vue'
+import { useDialog } from '../useDialog.js'
 import { accountApi, authApi } from '../api.js'
 import { X, ShieldCheck, ShieldAlert, LogOut } from 'lucide-vue-next'
 
 const emit = defineEmits(['close', 'logout', 'toast'])
+const dialog = ref(null)
+useDialog(dialog, () => emit('close'))
 
 const account = ref(null)
 const loading = ref(true)
@@ -102,9 +106,9 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" @mousedown.self="emit('close')">
-      <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div ref="dialog" role="dialog" aria-modal="true" aria-labelledby="account-settings-title" tabindex="-1" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-5">
-          <h2 class="text-lg font-bold dark:text-white">Setări cont</h2>
+          <h2 id="account-settings-title" class="text-lg font-bold dark:text-white">Setări cont</h2>
           <button @click="emit('close')" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition" aria-label="Închide">
             <X :size="18" />
           </button>
@@ -117,7 +121,7 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
           <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4">
             <p class="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Cont</p>
             <p class="font-bold dark:text-white">{{ account.username }}</p>
-            <div class="flex items-center gap-2 mt-2 text-sm">
+            <div class="flex flex-wrap items-center gap-2 mt-2 text-sm">
               <span class="text-gray-500 dark:text-gray-400">{{ account.email ?? 'fără email' }}</span>
               <span v-if="account.email && account.emailVerified" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
                 <ShieldCheck :size="12" /> Verificat
@@ -131,8 +135,8 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
           <!-- Change password -->
           <form @submit.prevent="submitPassword" class="space-y-3">
             <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Schimbă parola</p>
-            <input v-model="currentPassword" type="password" autocomplete="current-password" placeholder="Parola curentă" :class="inputCls" />
-            <input v-model="newPassword" type="password" autocomplete="new-password" placeholder="Parolă nouă (min 8)" :class="inputCls" />
+            <input v-model="currentPassword" type="password" autocomplete="current-password" aria-label="Parola curentă pentru schimbarea parolei" required placeholder="Parola curentă" :class="inputCls" />
+            <input v-model="newPassword" type="password" autocomplete="new-password" aria-label="Parola nouă" required minlength="8" maxlength="100" placeholder="Parolă nouă (min 8)" :class="inputCls" />
             <button type="submit" :disabled="pwBusy" class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition active:scale-[0.98]">
               {{ pwBusy ? 'Se salvează...' : 'Schimbă parola' }}
             </button>
@@ -143,13 +147,14 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
             <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Schimbă emailul</p>
             <input v-model="newEmail" type="email" autocomplete="email" aria-label="Noua adresă de email" required placeholder="adresa@email.com" :class="inputCls" :disabled="awaitingCode" />
             <input v-if="!awaitingCode" v-model="emailPassword" type="password" autocomplete="current-password" aria-label="Parola pentru schimbarea emailului" required placeholder="Confirmă parola curentă" :class="inputCls" />
-            <input v-if="awaitingCode" v-model="code" inputmode="numeric" maxlength="6" placeholder="Cod (6 cifre)" :class="[inputCls, 'text-center tracking-[0.4em]']" />
+            <input v-if="awaitingCode" v-model="code" aria-label="Codul pentru noua adresă de email" autocomplete="one-time-code" inputmode="numeric" maxlength="6" required pattern="[0-9]{6}" placeholder="Cod (6 cifre)" :class="[inputCls, 'text-center tracking-[0.4em]']" />
             <button type="submit" :disabled="emailBusy" class="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-700 dark:text-gray-200 font-bold py-2.5 rounded-xl text-sm transition active:scale-[0.98]">
               {{ emailBusy ? 'Se procesează...' : (awaitingCode ? 'Confirmă codul' : 'Trimite codul') }}
             </button>
           </form>
 
           <FinanceIntegrationPanel @toast="(...args) => emit('toast', ...args)" />
+          <SessionPanel @toast="(...args) => emit('toast', ...args)" @logout="emit('logout')" />
 
           <!-- Logout everywhere -->
           <div class="pt-2 border-t border-gray-100 dark:border-gray-800">

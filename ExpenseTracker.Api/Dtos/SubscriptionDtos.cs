@@ -41,6 +41,12 @@ public class CreateSubscriptionDto : IValidatableObject
 
 public class UpdateSubscriptionDto : CreateSubscriptionDto { }
 
+public class SubscriptionStatusDto
+{
+    [Required]
+    public bool? IsActive { get; set; }
+}
+
 public class SubscriptionResponseDto
 {
     public Guid Id { get; set; }
