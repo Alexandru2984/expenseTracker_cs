@@ -82,7 +82,7 @@ public class AuthTokenServiceTests
     [Fact]
     public void AccessToken_is_a_three_part_jwt()
     {
-        var (token, _) = Svc().CreateAccessToken(new User { Id = Guid.NewGuid(), Username = "u" });
+        var (token, _) = Svc().CreateAccessToken(new User { Id = Guid.NewGuid(), Username = "u" }, Guid.NewGuid());
         Assert.Equal(3, token.Split('.').Length);
     }
 }

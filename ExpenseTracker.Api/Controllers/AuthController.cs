@@ -183,6 +183,7 @@ public class AuthController : ControllerBase
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         user.EmailVerified = true; // proving control of the inbox also verifies it
+        await _verification.InvalidateAllAsync(user.Id);
 
         // Revoke every active session (logout everywhere) after a password reset.
         var tokens = await _db.RefreshTokens
@@ -208,7 +209,7 @@ public class AuthController : ControllerBase
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TokenHash == hash);
 
-        if (stored is null || DateTime.UtcNow >= stored.ExpiresAt)
+        if (stored is null || !stored.User.EmailVerified || DateTime.UtcNow >= stored.ExpiresAt)
         {
             _tokens.ClearAuthCookies(Response, Request.IsHttps);
             return Unauthorized();
@@ -231,7 +232,15 @@ public class AuthController : ControllerBase
 
         // Rotate: revoke the presented token, issue a fresh pair.
         stored.RevokedAt = DateTime.UtcNow;
-        await IssueSessionAsync(stored.User);
+        try
+        {
+            await IssueSessionAsync(stored.User);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _tokens.ClearAuthCookies(Response, Request.IsHttps);
+            return Unauthorized();
+        }
         return Ok(new UserResponseDto { Username = stored.User.Username });
     }
 
@@ -276,16 +285,17 @@ public class AuthController : ControllerBase
     // Creates+persists a rotating refresh token, writes both auth cookies.
     private async Task IssueSessionAsync(User user)
     {
-        var (accessToken, accessExpires) = _tokens.CreateAccessToken(user);
         var (rawRefresh, refreshHash, refreshExpires) = _tokens.CreateRefreshToken();
 
-        _db.RefreshTokens.Add(new RefreshToken
+        var session = new RefreshToken
         {
             UserId = user.Id,
             TokenHash = refreshHash,
             ExpiresAt = refreshExpires
-        });
+        };
+        _db.RefreshTokens.Add(session);
         await _db.SaveChangesAsync();
+        var (accessToken, accessExpires) = _tokens.CreateAccessToken(user, session.Id);
 
         _tokens.WriteAuthCookies(Response, Request.IsHttps,
             accessToken, accessExpires, rawRefresh, refreshExpires);

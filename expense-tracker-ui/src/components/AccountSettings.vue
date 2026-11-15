@@ -16,6 +16,7 @@ const pwBusy = ref(false)
 
 // change email
 const newEmail = ref('')
+const emailPassword = ref('')
 const emailBusy = ref(false)
 const awaitingCode = ref(false)
 const code = ref('')
@@ -54,7 +55,8 @@ async function submitEmail() {
   if (!newEmail.value.trim()) { emit('toast', 'Introdu o adresă de email.'); return }
   emailBusy.value = true
   try {
-    await accountApi.changeEmail({ email: newEmail.value.trim() })
+    await accountApi.changeEmail({ email: newEmail.value.trim(), currentPassword: emailPassword.value })
+    emailPassword.value = ''
     awaitingCode.value = true
     emit('toast', 'Ți-am trimis un cod la noua adresă.', 'success')
     await load()
@@ -139,7 +141,8 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
           <!-- Change email -->
           <form @submit.prevent="awaitingCode ? confirmEmail() : submitEmail()" class="space-y-3">
             <p class="text-xs text-gray-400 uppercase font-bold tracking-wider">Schimbă emailul</p>
-            <input v-model="newEmail" type="email" autocomplete="email" placeholder="adresa@email.com" :class="inputCls" />
+            <input v-model="newEmail" type="email" autocomplete="email" aria-label="Noua adresă de email" required placeholder="adresa@email.com" :class="inputCls" :disabled="awaitingCode" />
+            <input v-if="!awaitingCode" v-model="emailPassword" type="password" autocomplete="current-password" aria-label="Parola pentru schimbarea emailului" required placeholder="Confirmă parola curentă" :class="inputCls" />
             <input v-if="awaitingCode" v-model="code" inputmode="numeric" maxlength="6" placeholder="Cod (6 cifre)" :class="[inputCls, 'text-center tracking-[0.4em]']" />
             <button type="submit" :disabled="emailBusy" class="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-700 dark:text-gray-200 font-bold py-2.5 rounded-xl text-sm transition active:scale-[0.98]">
               {{ emailBusy ? 'Se procesează...' : (awaitingCode ? 'Confirmă codul' : 'Trimite codul') }}

@@ -72,3 +72,25 @@ listă explicită a punctelor neterminate în locul unei promisiuni de „zero v
 ## Dovezi și starea lansărilor
 
 Rezultatele finale și commiturile fiecărei etape se adaugă aici după verificare.
+
+- Etapa 1, `8d6a9d8`: 50 teste backend; 3 regresii reproduse înainte de fix.
+  Lansată imaginea `expensetracker_cs-api:auth-fix-stage1`; backup restaurat în
+  izolare, health public 200, export Finance anonim 401/no-store, zero restarturi.
+- Etapa 2: access token legat de un RefreshToken activ și de un HMAC al stării
+  credentialelor; logout individual/global, rotație și schimbarea parolei invalidează
+  imediat JWT-ul vechi. Schimbarea emailului cere parola, invalidează coduri/sesiuni
+  și oferă o sesiune curentă pentru confirmare. Codurile vechi sunt invalidate și
+  la schimbare/resetare parolă. Concurență optimistă pe coloane existente, fără DDL;
+  snapshot EF actualizat pentru metadatele de concurență, fără migrație necesară.
+  Origin/Fetch Metadata verificat inclusiv pe auth; CORS cu credențiale doar pentru
+  originile configurate. SMTP obligatoriu în Production; codurile se loghează numai
+  în Development. Limită corp HTTP 1,1 MB și eliminarea antetului Kestrel Server.
+  59 teste trecute în memorie și pe PostgreSQL izolat, build UI și 24 verificări ale
+  conectorului la 1440/390/320 px. Fără schimbarea contractului Finance.
+
+La prima folosire după etapa 2, JWT-urile vechi fără identificator de sesiune sunt
+respinse; un refresh legitim activ poate reface sesiunea. Nu există dovadă de
+exploatare din acest audit. Acest lucru nu dovedește absența exploatării istorice;
+o investigație a jurnalelor și revocarea sesiunilor existente rămân acțiuni distincte.
+Pe baza de producție verificată la prima lansare erau zero conturi și abonamente;
+testele au folosit exclusiv conturi sintetice în baze temporare.

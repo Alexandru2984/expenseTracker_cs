@@ -35,6 +35,7 @@ namespace ExpenseTracker.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("RevokedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TokenHash")
@@ -148,6 +149,7 @@ namespace ExpenseTracker.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("Attempts")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.Property<string>("CodeHash")
@@ -156,6 +158,7 @@ namespace ExpenseTracker.Api.Migrations
                         .HasColumnType("character varying(120)");
 
                     b.Property<DateTime?>("ConsumedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAt")

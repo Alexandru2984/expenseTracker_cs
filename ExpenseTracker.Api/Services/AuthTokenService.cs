@@ -30,7 +30,7 @@ public class AuthTokenService
     private int AccessMinutes => _config.GetValue<int?>("Jwt:AccessTokenMinutes") ?? 15;
     public int RefreshDays => _config.GetValue<int?>("Jwt:RefreshTokenDays") ?? 14;
 
-    public (string token, DateTime expiresAt) CreateAccessToken(User user)
+    public (string token, DateTime expiresAt) CreateAccessToken(User user, Guid sessionId)
     {
         var secret = _config["Jwt:Secret"]!;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
@@ -40,7 +40,9 @@ public class AuthTokenService
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username)
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim("session_id", sessionId.ToString()),
+            new Claim("credential_stamp", CredentialStamp(user))
         };
 
         var jwt = new JwtSecurityToken(
@@ -62,6 +64,11 @@ public class AuthTokenService
 
     public static string Hash(string raw) =>
         Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+
+    // Bind JWTs to current credentials without putting password hashes in tokens.
+    public string CredentialStamp(User user) => Convert.ToBase64String(HMACSHA256.HashData(
+        Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!),
+        Encoding.UTF8.GetBytes($"{user.PasswordHash}\n{user.Email}\n{user.EmailVerified}")));
 
     public static string CreateCsrfToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));

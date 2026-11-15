@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using ExpenseTracker.Api.Data;
 using Xunit;
 
@@ -35,8 +36,23 @@ public class TestApiFactory : WebApplicationFactory<Program>
                 .ToList();
             foreach (var d in toRemove) services.Remove(d);
 
-            services.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase(_dbName));
+            var postgres = Environment.GetEnvironmentVariable("EXPENSE_TEST_POSTGRES");
+            services.AddDbContext<AppDbContext>(o =>
+            {
+                if (string.IsNullOrWhiteSpace(postgres)) o.UseInMemoryDatabase(_dbName);
+                else o.UseNpgsql(postgres);
+            });
         });
+    }
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // Only the explicitly supplied disposable test database is initialized.
+        db.Database.EnsureCreated();
+        return host;
     }
 }
 

@@ -117,7 +117,8 @@ Copiază `.env.example` în `.env` și completează valorile. **Nu comite niciod
 | `ASPNETCORE_ENVIRONMENT` | Mediu .NET | `Production` |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credențiale container PostgreSQL | `expense_tracker` / `expense_user` / *(secret)* |
 
-> Notă: dacă `Smtp__Host` nu e setat, codurile de verificare sunt scrise în log (fallback de dezvoltare), nu trimise pe email.
+> `Smtp__Host` este obligatoriu în producție. Numai în Development, dacă SMTP lipsește,
+> codurile sunt scrise în log pentru testare locală.
 
 ---
 
@@ -192,6 +193,10 @@ token-urilor, rezolvarea IP-ului real, izolarea pe utilizator (ownership) și fl
 ## Licență
 
 [MIT](LICENSE)
+
+## Audit și plan de produs
+
+[Constatări, remedieri verificate și etapele următoare](docs/AUDIT-AND-ROADMAP.md).
 
 ## Conectare cu Finance F#
 

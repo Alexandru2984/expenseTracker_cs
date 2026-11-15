@@ -90,6 +90,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<VerificationCode>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Attempts).IsConcurrencyToken();
+            entity.Property(e => e.ConsumedAt).IsConcurrencyToken();
 
             entity.Property(e => e.CodeHash)
                   .IsRequired()
@@ -110,6 +112,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<RefreshToken>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.RevokedAt).IsConcurrencyToken();
 
             entity.Property(e => e.TokenHash)
                   .IsRequired()

@@ -24,8 +24,10 @@ public class FinanceIntegrationTests(TestApiFactory factory)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = new User { Username = "finance_" + Guid.NewGuid().ToString("N"), PasswordHash = BCrypt.Net.BCrypt.HashPassword(Password), EmailVerified = true };
         db.Users.Add(user);
+        var session = new RefreshToken { UserId = user.Id, TokenHash = AuthTokenService.Hash(Guid.NewGuid().ToString()), ExpiresAt = DateTime.UtcNow.AddDays(1) };
+        db.RefreshTokens.Add(session);
         await db.SaveChangesAsync();
-        var jwt = scope.ServiceProvider.GetRequiredService<AuthTokenService>().CreateAccessToken(user).token;
+        var jwt = scope.ServiceProvider.GetRequiredService<AuthTokenService>().CreateAccessToken(user, session.Id).token;
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         client.DefaultRequestHeaders.Add("Cookie", $"access_token={jwt}; csrf_token=integration-test-csrf");
         client.DefaultRequestHeaders.Add("X-CSRF-Token", "integration-test-csrf");
@@ -70,7 +72,7 @@ public class FinanceIntegrationTests(TestApiFactory factory)
         Assert.DoesNotContain(token, list);
         Assert.DoesNotContain("tokenHash", list);
         using var scope = factory.Services.CreateScope();
-        var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().RefreshTokens.SingleAsync(t=>t.UserId==owner);
+        var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().RefreshTokens.SingleAsync(t=>t.UserId==owner && t.TokenHash.StartsWith(FinanceTokens.HashNamespace));
         Assert.Equal(FinanceTokens.Hash(token),row.TokenHash);
     }
 

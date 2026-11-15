@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -22,6 +23,11 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = 1_100_000;
+        options.AddServerHeader = false;
+    });
 
     // ── Configure Forwarded Headers (for Cloudflare → Nginx → Docker) ─────────
     // Nginx supplies one verified client address and scheme. Trust only loopback
@@ -50,6 +56,11 @@ try
         if (string.IsNullOrWhiteSpace(connStr))
         {
             Log.Fatal("ConnectionStrings__DefaultConnection is not set. Refusing to start in Production.");
+            return 1;
+        }
+        if (string.IsNullOrWhiteSpace(builder.Configuration["Smtp:Host"]))
+        {
+            Log.Fatal("Smtp__Host is required in Production. Verification codes must never be logged.");
             return 1;
         }
     }
@@ -114,6 +125,25 @@ try
                             context.Token = cookie;
                     }
                     return Task.CompletedTask;
+                },
+                OnTokenValidated = async context =>
+                {
+                    var principal = context.Principal!;
+                    if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+                        || !Guid.TryParse(principal.FindFirstValue("session_id"), out var sessionId))
+                    {
+                        context.Fail("Session is missing.");
+                        return;
+                    }
+                    var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                    var now = DateTime.UtcNow;
+                    var session = await db.RefreshTokens.AsNoTracking().Include(t => t.User)
+                        .SingleOrDefaultAsync(t => t.Id == sessionId && t.UserId == userId
+                            && t.RevokedAt == null && t.ExpiresAt > now
+                            && !t.TokenHash.StartsWith("finance:"), context.HttpContext.RequestAborted);
+                    var tokens = context.HttpContext.RequestServices.GetRequiredService<AuthTokenService>();
+                    if (session is null || principal.FindFirstValue("credential_stamp") != tokens.CredentialStamp(session.User))
+                        context.Fail("Session has been revoked or credentials changed.");
                 }
             };
         });
@@ -129,7 +159,7 @@ try
         options.AddPolicy("Frontend", policy =>
         {
             if (allowedOrigins.Length > 0)
-                policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+                policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
         });
     });
 
@@ -245,6 +275,22 @@ try
     }
 
     app.UseCors("Frontend");
+
+    // SameSite does not isolate sibling subdomains. Validate browser origin on
+    // every mutation, including anonymous login, refresh and logout endpoints.
+    app.Use(async (ctx, next) =>
+    {
+        if (ctx.Request.Path.StartsWithSegments("/api")
+            && !HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method)
+            && !HttpMethods.IsOptions(ctx.Request.Method)
+            && !RequestOrigin.IsAllowed(ctx.Request, allowedOrigins))
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsJsonAsync(new ProblemDetails { Status = 403, Title = "Request origin rejected." });
+            return;
+        }
+        await next();
+    });
 
     app.UseRateLimiter();
 

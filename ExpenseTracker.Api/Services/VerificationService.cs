@@ -24,6 +24,14 @@ public class VerificationService
         _email = email;
     }
 
+    // Save with the caller's credential update to invalidate codes for old credentials.
+    public async Task InvalidateAllAsync(Guid userId)
+    {
+        var codes = await _db.VerificationCodes
+            .Where(c => c.UserId == userId && c.ConsumedAt == null).ToListAsync();
+        foreach (var entry in codes) entry.ConsumedAt = DateTime.UtcNow;
+    }
+
     /// <summary>Generates a 6-digit code, stores its hash, invalidates older codes, emails it.</summary>
     public async Task IssueAsync(User user, VerificationPurpose purpose)
     {
@@ -70,7 +78,15 @@ public class VerificationService
             Encoding.UTF8.GetBytes(AuthTokenService.Hash(code)));
 
         if (ok) entry.ConsumedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        return ok;
+        try
+        {
+            await _db.SaveChangesAsync();
+            return ok;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _db.ChangeTracker.Clear();
+            return false;
+        }
     }
 }

@@ -16,10 +16,13 @@ public class EmailService
     private readonly IConfiguration _config;
     private readonly ILogger<EmailService> _logger;
 
-    public EmailService(IConfiguration config, ILogger<EmailService> logger)
+    private readonly IHostEnvironment? _environment;
+
+    public EmailService(IConfiguration config, ILogger<EmailService> logger, IHostEnvironment? environment = null)
     {
         _config = config;
         _logger = logger;
+        _environment = environment;
     }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_config["Smtp:Host"]);
@@ -38,9 +41,10 @@ public class EmailService
 
         if (!IsConfigured)
         {
-            _logger.LogWarning(
-                "SMTP not configured — {Purpose} code for {Email} is {Code} (dev fallback)",
-                purpose, toEmail, code);
+            if (_environment?.IsDevelopment() == true)
+                _logger.LogWarning("Development verification code: {Code}", code);
+            else if (_environment?.IsProduction() == true)
+                throw new InvalidOperationException("SMTP is required in Production.");
             return;
         }
 

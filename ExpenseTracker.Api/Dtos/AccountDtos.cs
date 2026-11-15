@@ -22,6 +22,9 @@ public class ChangePasswordDto
 
 public class ChangeEmailDto
 {
+    [Required, StringLength(128)]
+    public string CurrentPassword { get; set; } = string.Empty;
+
     [Required]
     [EmailAddress]
     [StringLength(256)]

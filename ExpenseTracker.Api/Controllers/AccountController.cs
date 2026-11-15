@@ -69,6 +69,7 @@ public class AccountController : ControllerBase
             });
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        await _verification.InvalidateAllAsync(user.Id);
 
         // Invalidate every existing session, then re-issue one for this device.
         await RevokeAllSessionsAsync(user.Id);
@@ -87,6 +88,10 @@ public class AccountController : ControllerBase
         if (user is null) return Unauthorized();
 
         var email = dto.Email.Trim().ToLowerInvariant();
+        if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+            return BadRequest(new ProblemDetails { Title = "Parola curentă este incorectă." });
+        if (email == user.Email)
+            return BadRequest(new ProblemDetails { Title = "Introdu o adresă de email diferită." });
         if (await _db.Users.AnyAsync(u => u.Email == email && u.Id != user.Id))
             return Conflict(new ProblemDetails
             {
@@ -96,9 +101,12 @@ public class AccountController : ControllerBase
 
         user.Email = email;
         user.EmailVerified = false;
+        await _verification.InvalidateAllAsync(user.Id);
+        await RevokeAllSessionsAsync(user.Id);
         await _db.SaveChangesAsync();
 
         await _verification.IssueAsync(user, VerificationPurpose.EmailVerification);
+        await IssueSessionAsync(user);
 
         return Ok(new { message = "Ți-am trimis un cod de verificare la noua adresă." });
     }
@@ -123,16 +131,17 @@ public class AccountController : ControllerBase
 
     private async Task IssueSessionAsync(User user)
     {
-        var (accessToken, accessExpires) = _tokens.CreateAccessToken(user);
         var (rawRefresh, refreshHash, refreshExpires) = _tokens.CreateRefreshToken();
 
-        _db.RefreshTokens.Add(new RefreshToken
+        var session = new RefreshToken
         {
             UserId = user.Id,
             TokenHash = refreshHash,
             ExpiresAt = refreshExpires
-        });
+        };
+        _db.RefreshTokens.Add(session);
         await _db.SaveChangesAsync();
+        var (accessToken, accessExpires) = _tokens.CreateAccessToken(user, session.Id);
 
         _tokens.WriteAuthCookies(Response, Request.IsHttps,
             accessToken, accessExpires, rawRefresh, refreshExpires);
