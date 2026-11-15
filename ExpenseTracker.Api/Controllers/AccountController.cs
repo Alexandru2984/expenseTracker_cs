@@ -106,6 +106,7 @@ public class AccountController : ControllerBase
         await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
         await _verification.LockAccountAsync(user);
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        LoginProtection.Reset(user);
         await _verification.InvalidateAllAsync(user.Id);
 
         // Invalidate every existing session, then re-issue one for this device.

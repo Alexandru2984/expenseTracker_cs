@@ -16,6 +16,10 @@ public class User
 
     public DateTime? VerificationEmailSentAt { get; set; }
 
+    public int LoginFailureCount { get; set; }
+    public DateTime? LastLoginFailureAt { get; set; }
+    public DateTime? LoginBlockedUntil { get; set; }
+
     public string PasswordHash { get; set; } = string.Empty;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

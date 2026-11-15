@@ -16,6 +16,16 @@ public class AppDbContext : DbContext
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
     public DbSet<MonthlyBudget> Budgets => Set<MonthlyBudget>();
 
+    public Task<User?> FindUserByUsernameAsync(string username)
+    {
+        var trimmed = username.Trim();
+        // PostgreSQL applies the same case mapping/collation to both operands and
+        // to the unique expression index. Do not mix database and thread cultures.
+        return Database.IsRelational()
+            ? Users.FromSqlInterpolated($"SELECT * FROM \"Users\" WHERE lower(\"Username\") = lower({trimmed})").SingleOrDefaultAsync()
+            : Users.SingleOrDefaultAsync(u => u.Username.ToLowerInvariant() == trimmed.ToLowerInvariant());
+    }
+
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -97,6 +107,8 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(e => e.Username)
                   .IsUnique();
+            // The migration additionally owns an expression index on lower(Username).
+            // EF cannot model expression indexes; retain it in future migrations.
 
             entity.Property(e => e.Email)
                   .IsConcurrencyToken()
@@ -105,6 +117,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.EmailVerified).IsConcurrencyToken();
             entity.Property(e => e.PendingEmail).HasMaxLength(256).IsConcurrencyToken();
             entity.Property(e => e.VerificationEmailSentAt).IsConcurrencyToken();
+            entity.Property(e => e.LoginFailureCount).IsConcurrencyToken().HasDefaultValue(0);
+            entity.Property(e => e.LastLoginFailureAt).IsConcurrencyToken();
+            entity.Property(e => e.LoginBlockedUntil).IsConcurrencyToken();
 
             // Unique per-email; PostgreSQL treats NULLs as distinct, so legacy
             // accounts without an email don't collide.

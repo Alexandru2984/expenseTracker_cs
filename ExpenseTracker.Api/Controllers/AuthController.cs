@@ -20,13 +20,16 @@ public class AuthController : ControllerBase
     private readonly AuthTokenService _tokens;
     private readonly VerificationService _verification;
     private readonly IConfiguration _config;
+    private readonly ILogger<AuthController> _logger;
+    private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N"));
 
-    public AuthController(AppDbContext db, AuthTokenService tokens, VerificationService verification, IConfiguration config)
+    public AuthController(AppDbContext db, AuthTokenService tokens, VerificationService verification, IConfiguration config, ILogger<AuthController> logger)
     {
         _db = db;
         _tokens = tokens;
         _verification = verification;
         _config = config;
+        _logger = logger;
     }
 
     // POST /api/auth/register — creates an UNVERIFIED account and emails a code.
@@ -48,10 +51,9 @@ public class AuthController : ControllerBase
             });
 
         var trimmedUsername = dto.Username.Trim();
-        var loweredUsername = trimmedUsername.ToLower();
         var email = dto.Email.Trim().ToLowerInvariant();
 
-        if (await _db.Users.AnyAsync(u => u.Username.ToLower() == loweredUsername))
+        if (await _db.FindUserByUsernameAsync(trimmedUsername) is not null)
             return Conflict(new ProblemDetails
             {
                 Title = "Username indisponibil.",
@@ -74,7 +76,11 @@ public class AuthController : ControllerBase
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync();
+        try { await _db.SaveChangesAsync(); }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            return Conflict(new ProblemDetails { Title = "Date indisponibile.", Detail = "Username-ul sau emailul este deja utilizat." });
+        }
 
         await _verification.IssueAsync(user, VerificationPurpose.EmailVerification);
 
@@ -92,19 +98,39 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        var loweredUsername = dto.Username.Trim().ToLower();
-        var user = await _db.Users
-            .FirstOrDefaultAsync(u => u.Username.ToLower() == loweredUsername);
+        var user = await _db.FindUserByUsernameAsync(dto.Username);
 
-        if (user is null || !PasswordRules.Verify(dto.Password, user.PasswordHash))
-            return Unauthorized(new ProblemDetails
-            {
-                Title = "Autentificare eșuată.",
-                Detail = "Username sau parolă greșită."
-            });
+        if (user is null)
+        {
+            // Keep an unknown account on the BCrypt path too. Never persist attacker-chosen names.
+            PasswordRules.Verify(dto.Password, DummyPasswordHash);
+            return Unauthorized(LoginFailed());
+        }
+
+        await using var transaction = _db.Database.IsRelational() ? await _db.Database.BeginTransactionAsync() : null;
+        await _verification.LockAccountAsync(user);
+        var now = DateTime.UtcNow;
+        if (LoginProtection.IsBlocked(user, now))
+        {
+            PasswordRules.Verify(dto.Password, DummyPasswordHash);
+            return Unauthorized(LoginFailed());
+        }
+        if (!PasswordRules.Verify(dto.Password, user.PasswordHash))
+        {
+            LoginProtection.Fail(user, now);
+            await _db.SaveChangesAsync();
+            if (transaction is not null) await transaction.CommitAsync();
+            if (LoginProtection.IsBlocked(user, now))
+                _logger.LogWarning("Account login backoff activated for {AccountId} until {BlockedUntil}", user.Id, user.LoginBlockedUntil);
+            return Unauthorized(LoginFailed());
+        }
+
+        LoginProtection.Reset(user);
+        await _db.SaveChangesAsync();
 
         if (!user.EmailVerified)
         {
+            if (transaction is not null) await transaction.CommitAsync();
             var pd = new ProblemDetails
             {
                 Status = StatusCodes.Status403Forbidden,
@@ -116,7 +142,9 @@ public class AuthController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, pd);
         }
 
-        await IssueSessionAsync(user);
+        var session = await CreateSessionAsync(user);
+        if (transaction is not null) await transaction.CommitAsync();
+        WriteSession(session);
         return Ok(new UserResponseDto { Username = user.Username });
     }
 
@@ -124,8 +152,7 @@ public class AuthController : ControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDto dto)
     {
-        var lowered = dto.Username.Trim().ToLower();
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == lowered);
+        var user = await _db.FindUserByUsernameAsync(dto.Username);
         // Verification is a one-time proof, never a passwordless login route for
         // an account that was already verified (including after password reset).
         if (user is null || user.EmailVerified)
@@ -145,8 +172,7 @@ public class AuthController : ControllerBase
     [HttpPost("resend-code")]
     public async Task<IActionResult> ResendCode([FromBody] ResendCodeDto dto)
     {
-        var lowered = dto.Username.Trim().ToLower();
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == lowered);
+        var user = await _db.FindUserByUsernameAsync(dto.Username);
         if (user is not null && !user.EmailVerified && user.Email is not null)
             await _verification.IssueAsync(user, VerificationPurpose.EmailVerification);
 
@@ -191,6 +217,7 @@ public class AuthController : ControllerBase
         }
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        LoginProtection.Reset(user);
         user.EmailVerified = true; // proving control of the inbox also verifies it
         await _verification.InvalidateAllAsync(user.Id);
 
@@ -300,6 +327,12 @@ public class AuthController : ControllerBase
     {
         Title = "Cod invalid.",
         Detail = "Codul este greșit sau a expirat. Cere unul nou."
+    };
+
+    private static ProblemDetails LoginFailed() => new()
+    {
+        Title = "Autentificare eșuată.",
+        Detail = "Date incorecte sau prea multe încercări. Verifică datele ori reîncearcă mai târziu."
     };
 
     // Creates+persists a rotating refresh token, writes both auth cookies.

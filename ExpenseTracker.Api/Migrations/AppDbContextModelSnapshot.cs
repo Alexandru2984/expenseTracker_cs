@@ -178,6 +178,20 @@ namespace ExpenseTracker.Api.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("LastLoginFailureAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LoginBlockedUntil")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LoginFailureCount")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("PasswordHash")
                         .IsConcurrencyToken()
                         .IsRequired()

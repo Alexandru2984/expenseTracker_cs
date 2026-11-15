@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ExpenseTracker.Api.Dtos;
 
-public class RegisterDto
+public class RegisterDto : IValidatableObject
 {
     [Required]
     [StringLength(50, MinimumLength = 3)]
@@ -16,6 +16,12 @@ public class RegisterDto
     [Required]
     [StringLength(100, MinimumLength = 8)]
     public string Password { get; set; } = string.Empty;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if ((Username?.Trim().Length ?? 0) < 3 || (Username?.Any(char.IsControl) ?? false))
+            yield return new ValidationResult("Username-ul trebuie să aibă cel puțin 3 caractere după eliminarea spațiilor și nu poate conține caractere de control.", [nameof(Username)]);
+    }
 }
 
 public class VerifyEmailDto

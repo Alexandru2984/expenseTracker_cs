@@ -151,10 +151,9 @@ Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).
 
 ## Puncte deschise după această rundă
 
-- Backoff persistent pentru încercări de parolă per cont și apărare la brute force
-  distribuit; cooldown-ul emailurilor este implementat în continuarea acestei runde.
-- Index unic pentru username normalizat, pentru a elimina și cursa între
-  înregistrări cu diferențe de majuscule; schimbarea necesită migrație controlată.
+- Backoff-ul persistent și indexul unic case-insensitive sunt implementate în
+  continuarea [LOGIN-PROTECTION.md](LOGIN-PROTECTION.md). Pauzele limitate reduc,
+  dar nu elimină blocarea abuzivă; MFA și alertarea externă rămân deschise.
 - MFA/passkeys, audit de acces cu retenție explicită și recuperare cont.
 - Backup off-site criptat și probă periodică de restaurare, verificarea alertelor
   SMTP, quotas și SLO; probele din această rundă nu înlocuiesc operarea continuă.
