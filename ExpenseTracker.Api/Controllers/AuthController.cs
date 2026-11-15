@@ -112,6 +112,7 @@ public class AuthController : ControllerBase
         var now = DateTime.UtcNow;
         if (LoginProtection.IsBlocked(user, now))
         {
+            if (transaction is not null) await transaction.CommitAsync();
             PasswordRules.Verify(dto.Password, DummyPasswordHash);
             return Unauthorized(LoginFailed());
         }

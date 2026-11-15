@@ -15,6 +15,8 @@ Loginul unui cont necunoscut, parola greșită și pauza produc aceeași eroare 
 fără Retry-After sau expunerea contorului. Conturile necunoscute și blocate trec
 printr-un BCrypt dummy; nu se creează rânduri pentru nume arbitrare. Acest lucru
 reduce diferențele evidente de procesare, fără a promite timp de răspuns constant.
+Pentru un cont deja blocat, lock-ul DB este eliberat înaintea verificării dummy,
+astfel încât traficul respins să nu țină inutil blocate operațiile de recuperare.
 Tokenurile/cookie-urile de sesiune sunt emise numai după commit.
 
 ## Identitatea username-ului
