@@ -125,17 +125,16 @@ public class AuthController : ControllerBase
     {
         var lowered = dto.Username.Trim().ToLower();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == lowered);
-        if (user is null)
+        // Verification is a one-time proof, never a passwordless login route for
+        // an account that was already verified (including after password reset).
+        if (user is null || user.EmailVerified)
             return BadRequest(InvalidCode());
 
-        if (!user.EmailVerified)
-        {
-            if (!await _verification.ConsumeAsync(user, VerificationPurpose.EmailVerification, dto.Code))
-                return BadRequest(InvalidCode());
+        if (!await _verification.ConsumeAsync(user, VerificationPurpose.EmailVerification, dto.Code))
+            return BadRequest(InvalidCode());
 
-            user.EmailVerified = true;
-            await _db.SaveChangesAsync();
-        }
+        user.EmailVerified = true;
+        await _db.SaveChangesAsync();
 
         await IssueSessionAsync(user);
         return Ok(new UserResponseDto { Username = user.Username });
