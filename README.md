@@ -95,7 +95,9 @@ docker compose up -d ui-builder
 docker compose up -d
 ```
 
-Configurarea Nginx de pe host trebuie să pointeze către portul `8080` pentru API și către folderul `frontend_dist` pentru fișierele statice.
+Configurarea Nginx de pe host trebuie să pointeze către portul loopback `8098` pentru API.
+Lansarea de producție folosește versiuni statice imuabile în `/opt/expense-tracker/releases/`;
+`frontend_dist` este folosit de fluxul simplu Docker Compose.
 
 ---
 

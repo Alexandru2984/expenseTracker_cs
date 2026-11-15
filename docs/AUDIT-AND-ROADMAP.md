@@ -128,3 +128,11 @@ testele au folosit exclusiv conturi sintetice în baze temporare.
   automat, concurență între două taburi și zero erori JavaScript în scenariile testate.
 
 Referință calendar: [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545).
+
+- Backup manual: pipeline cu pipefail, arhive publicate atomic, director 0700 și
+  fișiere 0600, credențiale rezolvate în container și excludere din Git. Restore cu
+  verificarea gzip, oprire la orice eroare SQL și tranzacție unică. Probă pe
+  PostgreSQL izolat: restaurare completă, rollback la SQL invalid, pg_dump eșuat
+  fără arhivă incompletă și fără mesaj fals de succes. Backupurile noi includ
+  clean/if-exists; un backup vechi fără aceste instrucțiuni poate necesita o bază
+  goală și va eșua sigur dacă obiectele există deja.

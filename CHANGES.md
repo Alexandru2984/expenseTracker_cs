@@ -1,5 +1,9 @@
 # CHANGES.md
 
+> Arhivă istorică a primului refactor. Descrierile de mai jos despre API_TOKEN,
+> localStorage, Caddy și .NET 8 nu descriu versiunea curentă. Pentru starea actuală
+> vezi README și [auditul din noiembrie 2026](docs/AUDIT-AND-ROADMAP.md).
+
 Rezumatul complet al modificărilor efectuate în cadrul refactor-ului production-ready.
 
 ---

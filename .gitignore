@@ -41,3 +41,8 @@ appsettings.Production.json
 .artifacts/
 
 __pycache__/
+
+# Database archives contain private user data.
+/backups/
+*.sql.gz
+*.dump
