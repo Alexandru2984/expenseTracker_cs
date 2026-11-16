@@ -13,14 +13,18 @@ public static class GoalProgress
         // Keep the calendar projection bounded, even for a one-cent monthly plan.
         var estimated = months is >= 0 and <= 1200 ? today.AddMonths(months.Value) : (DateOnly?)null;
         decimal? required = null;
+        int? periods = null;
         if (goal.TargetDate is { } due && due >= today)
         {
-            var periods = (due.Year - today.Year) * 12 + due.Month - today.Month;
-            if (today.AddMonths(periods) < due) periods++;
-            required = decimal.Ceiling(remaining / Math.Max(1, periods) * 100m) / 100m;
+            periods = (due.Year - today.Year) * 12 + due.Month - today.Month;
+            if (today.AddMonths(periods.Value) > due) periods--;
+            // Count only contributions that can occur on/before the deadline.
+            required = remaining == 0 ? 0 : periods > 0
+                ? decimal.Ceiling(remaining / periods.Value * 100m) / 100m : null;
         }
         var status = goal.IsArchived ? "archived" : remaining == 0 ? "completed"
             : goal.TargetDate < today ? "overdue"
+            : periods == 0 ? "due-soon"
             : goal.TargetDate is not null && (estimated is null || estimated > goal.TargetDate) ? "behind"
             : goal.MonthlyContribution > 0 ? "on-track" : "no-plan";
         return new(goal.Id, goal.Name, goal.Description, goal.Currency, goal.TargetAmount,

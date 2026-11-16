@@ -4,6 +4,7 @@ using System.Text.Json;
 using ExpenseTracker.Api.Data;
 using ExpenseTracker.Api.Models;
 using ExpenseTracker.Api.Services;
+using ExpenseTracker.Api.Integrations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -186,6 +187,30 @@ public class SavingsGoalTests(TestApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/goals/{goal.GetProperty("id")}", Goal())).StatusCode);
         Assert.Equal(0, (await Current(client)).GetProperty("savedAmount").GetDecimal());
     }
+
+    [Fact]
+    public async Task Csrf_is_required_and_a_valid_finance_token_cannot_access_goals_or_export_their_notes()
+    {
+        var (client, userId) = await TestAccount.Create(factory);
+        client.DefaultRequestHeaders.Remove("X-CSRF-Token");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/goals", Goal())).StatusCode);
+        client.DefaultRequestHeaders.Add("X-CSRF-Token", "synthetic-csrf");
+        await Create(client);
+        var token = FinanceTokens.Create();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.RefreshTokens.Add(new RefreshToken { UserId=userId, TokenHash=FinanceTokens.Hash(token), ExpiresAt=DateTime.UtcNow.AddDays(1) });
+            await db.SaveChangesAsync();
+        }
+        using var finance = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { HandleCookies=false });
+        finance.DefaultRequestHeaders.Authorization = new("Bearer",token);
+        var snapshot = await finance.GetAsync("/api/integrations/finance/subscriptions"); snapshot.EnsureSuccessStatusCode();
+        var data = await snapshot.Content.ReadFromJsonAsync<JsonElement>(); Assert.Equal(1,data.GetProperty("schemaVersion").GetInt32());
+        Assert.DoesNotContain("Private manual plan",data.ToString()); Assert.DoesNotContain("Travel",data.ToString());
+        Assert.Equal(HttpStatusCode.Unauthorized,(await finance.GetAsync("/api/goals")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,(await finance.PostAsJsonAsync("/api/goals",Goal())).StatusCode);
+    }
 }
 
 public class GoalProgressTests
@@ -200,6 +225,11 @@ public class GoalProgressTests
         goal.TargetDate = new(2028,2,29);
         Assert.Equal(100, GoalProgress.Calculate(goal,0,0,new(2028,1,31)).RequiredMonthlyContribution);
         Assert.Equal("behind", GoalProgress.Calculate(goal,0,0,new(2028,1,31)).Status);
+        goal.TargetDate = new(2028,3,30);
+        Assert.Equal(100, GoalProgress.Calculate(goal,0,0,new(2028,1,31)).RequiredMonthlyContribution);
+        goal.TargetDate = new(2028,2,15);
+        Assert.Equal("due-soon", GoalProgress.Calculate(goal,0,0,new(2028,1,31)).Status);
+        Assert.Null(GoalProgress.Calculate(goal,0,0,new(2028,1,31)).RequiredMonthlyContribution);
         Assert.Equal("overdue", GoalProgress.Calculate(goal,0,0,new(2028,3,1)).Status);
         Assert.Equal("completed", GoalProgress.Calculate(goal,120,2,new(2028,3,1)).Status);
     }

@@ -17,8 +17,10 @@ Estimarea pornește de la data UTC curentă și presupune prima contribuție lun
 peste o lună. Numărul de luni este rotunjit în sus din rămas / plan lunar.
 Adăugarea lunilor folosește calendarul, inclusiv sfârșitul lunii și anii bisecți.
 Proiecțiile peste 100 de ani nu produc o dată estimată. Necesarul lunar împarte
-suma rămasă la lunile calendaristice până la termen, rotunjite în sus, minimum
-o lună, apoi rotunjește suma în sus la cent. Dobânda, inflația și schimbul valutar
+suma rămasă la numărul de contribuții lunare care încap efectiv până la termen,
+apoi rotunjește suma în sus la cent. Dacă termenul vine înaintea primei contribuții
+lunare, nu este prezentat un necesar lunar fictiv: UI indică nevoia de a economisi
+înainte de termen. Dobânda, inflația și schimbul valutar
 nu sunt incluse. Un termen trecut nu este tratat ca o plată restantă.
 
 Obiectivele se filtrează în lucru / atinse / arhivate. Arhivarea păstrează
