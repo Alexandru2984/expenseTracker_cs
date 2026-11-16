@@ -8,6 +8,7 @@ using ExpenseTracker.Api.Data;
 using ExpenseTracker.Api.Dtos;
 using ExpenseTracker.Api.Models;
 using ExpenseTracker.Api.Services;
+using ExpenseTracker.Api.Infrastructure;
 
 namespace ExpenseTracker.Api.Controllers;
 
@@ -146,7 +147,7 @@ public class AuthController : ControllerBase
         var session = await CreateSessionAsync(user);
         if (transaction is not null) await transaction.CommitAsync();
         WriteSession(session);
-        return Ok(new UserResponseDto { Username = user.Username });
+        return Ok(new UserResponseDto { Username = user.Username, AccountContext = _tokens.AccountContext(user.Id) });
     }
 
     // POST /api/auth/verify-email — confirms the code and auto-logs the user in.
@@ -166,7 +167,7 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         await IssueSessionAsync(user);
-        return Ok(new UserResponseDto { Username = user.Username });
+        return Ok(new UserResponseDto { Username = user.Username, AccountContext = _tokens.AccountContext(user.Id) });
     }
 
     // POST /api/auth/resend-code — re-sends an email-verification code.
@@ -238,6 +239,8 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Refresh()
     {
+        if (User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUser)
+            && !_tokens.MatchesAccountContext(Request, currentUser)) return Conflict(BrowserAccountContext.Changed());
         var raw = Request.Cookies[AuthTokenService.RefreshCookie];
         if (string.IsNullOrEmpty(raw))
             return Unauthorized();
@@ -246,6 +249,9 @@ public class AuthController : ControllerBase
         var stored = await _db.RefreshTokens
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TokenHash == hash);
+
+        if (stored is not null && !_tokens.MatchesAccountContext(Request, stored.UserId))
+            return Conflict(BrowserAccountContext.Changed());
 
         if (stored is null || !stored.User.EmailVerified || DateTime.UtcNow >= stored.ExpiresAt)
         {
@@ -288,7 +294,7 @@ public class AuthController : ControllerBase
             _tokens.ClearAuthCookies(Response, Request.IsHttps);
             return Unauthorized();
         }
-        return Ok(new UserResponseDto { Username = stored.User.Username });
+        return Ok(new UserResponseDto { Username = stored.User.Username, AccountContext = _tokens.AccountContext(stored.UserId) });
     }
 
     // POST /api/auth/logout — revokes the current refresh token and clears cookies
@@ -296,11 +302,15 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Logout()
     {
+        if (User.Identity?.IsAuthenticated == true && Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUser)
+            && !_tokens.MatchesAccountContext(Request, currentUser)) return Conflict(BrowserAccountContext.Changed());
         var raw = Request.Cookies[AuthTokenService.RefreshCookie];
         if (!string.IsNullOrEmpty(raw))
         {
             var hash = AuthTokenService.Hash(raw);
             var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+            if (stored is not null && !_tokens.MatchesAccountContext(Request, stored.UserId))
+                return Conflict(BrowserAccountContext.Changed());
             if (stored is not null && stored.RevokedAt is null)
             {
                 stored.RevokedAt = DateTime.UtcNow;
@@ -316,10 +326,12 @@ public class AuthController : ControllerBase
     // GET /api/auth/me — current identity (used by the SPA to bootstrap auth state)
     [HttpGet("me")]
     [Authorize]
+    [EnableRateLimiting("auth-status")]
     public IActionResult Me()
     {
         var username = User.FindFirstValue(ClaimTypes.Name) ?? "";
-        return Ok(new UserResponseDto { Username = username });
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) return Unauthorized();
+        return Ok(new UserResponseDto { Username = username, AccountContext = _tokens.AccountContext(userId) });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

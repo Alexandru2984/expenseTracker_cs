@@ -196,6 +196,13 @@ try
             }));
 
         // Strict policy for auth endpoints (brute-force / credential stuffing): 10 req/min per IP
+        // Identity reads synchronize tabs without consuming the password/OTP bucket.
+        options.AddPolicy("auth-status", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = Permit(60), Window = TimeSpan.FromMinutes(1), QueueLimit = 0
+            }));
+
         options.AddPolicy("auth", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(ClientIp.Partition(ctx), _ => new FixedWindowRateLimiterOptions
             {
@@ -299,6 +306,22 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
+
+    // Cookies are shared between tabs. Bind SPA requests to the account whose
+    // form was opened, so a missed/delayed cross-tab notification cannot retarget it.
+    app.Use(async (ctx, next) =>
+    {
+        if (ctx.User.Identity?.IsAuthenticated == true && ctx.Request.Path.StartsWithSegments("/api")
+            && !ctx.Request.Path.StartsWithSegments("/api/auth") && !ctx.Request.Path.StartsWithSegments("/api/integrations/finance")
+            && Guid.TryParse(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+            && !ctx.RequestServices.GetRequiredService<AuthTokenService>().MatchesAccountContext(ctx.Request, userId))
+        {
+            ctx.Response.StatusCode = 409;
+            await ctx.Response.WriteAsJsonAsync(BrowserAccountContext.Changed());
+            return;
+        }
+        await next();
+    });
 
     // ── CSRF: double-submit cookie ────────────────────────────────────────────
     // Cookies are sent automatically by the browser, so we require that unsafe

@@ -84,4 +84,5 @@ public class LoginDto
 public class UserResponseDto
 {
     public string Username { get; set; } = string.Empty;
+    public string AccountContext { get; set; } = string.Empty;
 }

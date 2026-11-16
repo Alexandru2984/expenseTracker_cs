@@ -19,6 +19,7 @@ public class AuthTokenService
     public const string RefreshCookie = "refresh_token";
     public const string CsrfCookie = "csrf_token";
     public const string CsrfHeader = "X-CSRF-Token";
+    public const string AccountContextHeader = "X-Account-Context";
 
     // Refresh cookie is only sent to the auth endpoints that need it.
     public const string RefreshPath = "/api/auth";
@@ -64,6 +65,19 @@ public class AuthTokenService
 
     public static string Hash(string raw) =>
         Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+
+    // An opaque identity binding, not an authentication credential. Stable across
+    // refreshes and credential updates, distinct from every other MAC purpose.
+    public string AccountContext(Guid userId) => Convert.ToHexString(HMACSHA256.HashData(
+        Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!), Encoding.UTF8.GetBytes($"browser-account:v1:{userId:N}")));
+
+    public bool MatchesAccountContext(HttpRequest request, Guid userId)
+    {
+        // Optional for existing API clients; the SPA always binds authenticated requests.
+        if (!request.Headers.TryGetValue(AccountContextHeader, out var values)) return true;
+        return values.Count == 1 && values[0] is { Length: 64 } context
+            && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(context), Encoding.UTF8.GetBytes(AccountContext(userId)));
+    }
 
     // Bind JWTs to current credentials without putting password hashes in tokens.
     public string CredentialStamp(User user) => Convert.ToBase64String(HMACSHA256.HashData(
