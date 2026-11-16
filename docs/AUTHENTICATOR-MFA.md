@@ -142,3 +142,47 @@ MFA protejează loginuri noi; un cookie de sesiune valid ori un token Finance fu
 nu începe să ceară OTP la fiecare cerere. XSS/compromiterea dispozitivului sau a
 serverului necesită controalele lor. Utilizatorii trebuie să păstreze codurile
 separat de telefon; nu există recuperare administrativă care ocolește factorii.
+
+### Rezultatul lansării
+
+Cod activ: `23a3174d6fb1114f15aea61dd3100081b4681ff9`, pe domeniul
+`https://expenses.micutu.com`. Commiturile etapei folosesc identitatea umană
+existentă, fără coautori suplimentari. Documentația finală poate avea un HEAD
+ulterior acestui build; labelul imaginii și fișierul public build-revision indică
+intenționat commitul codului lansat.
+
+- 251 teste backend trecute, zero skip, pe PostgreSQL temporar; modelul EF nu are
+  schimbări în afara migrației. Restore NuGet cu audit pentru toate dependențele
+  și erori la avertismentele de vulnerabilități a trecut.
+- 1.098 verificări browser: dashboard 436, Finance 24, sesiuni 58, obiective 168,
+  notificări 132, MFA 180. Testele MFA acoperă light/dark la 320/390/1440 px,
+  inclusiv WCAG și păstrarea tokenului Finance în interfață.
+- 12 teste de operațiuni, instalare npm curată fără scripts, npm audit fără
+  vulnerabilități raportate, build UI și imagine Alpine reușite. npm semnalează
+  separat deprecarea pachetului existent lucide-vue-next; migrarea bibliotecii
+  rămâne de planificat, fără a o prezenta ca vulnerabilitate confirmată.
+- Proba cu binarele reale, exclusiv pe cont sintetic și PostgreSQL fără rețea
+  externă: activare MFA, login 202 fără cookie auth, recuperare 200, verificarea
+  criptării unui secret temporar și activ, respingerea cheii greșite; export
+  Finance schemaVersion 1 cu același token în imaginea nouă și veche.
+  Loginul cu parola în imaginea veche a produs **500 fără cookie auth** (BCrypt
+  vechi nu recunoaște prefixul), iar scrierea de resetare legacy a fost respinsă
+  de constrângerea SQL. Aceasta confirmă închiderea accesului, nu un rollback
+  funcțional al loginului MFA.
+- Backupul privat `/var/backups/expense-tracker/deploy-20261116T141405Z` s-a
+  restaurat în izolare. Avea zero utilizatori și abonamente; nu existau încă
+  secrete MFA de decriptat în backupul real. Cheia candidatului a trecut validarea
+  de format și proba CLI; secretele existente au fost exercitate separat în proba
+  sintetică. Migrația 14 → 15, repetarea idempotentă și query-urile EF ale
+  imaginilor veche/nouă au trecut înaintea modificării producției.
+- Domeniul public: health 200, 13 rute private 401/no-store, nonce CSP diferit pe
+  cereri diferite, revizie UI/imagine corectă. Chromium la 390 px: legătura protejată
+  `#security` afișează loginul fără dialog privat, overflow, erori JS sau încălcări
+  CSP. Clientul F# verifică trei rute anonime 401/no-store.
+- API sănătos, non-root, zero restarturi după activare și fără erori de pornire;
+  containerul DB și StartedAt au rămas identice. Mediul DB nu conține cheia MFA
+  sau secrete JWT/SMTP. Dry-run Compose implicit păstrează API/DB Running.
+  Nicio creare de cont ori expediere de email de test în producție.
+
+Verdict tehnic: criteriile acestei lansări au trecut. TOTP rămâne opțional;
+alertarea externă, passkeys și un exercițiu uman de incidente rămân puncte deschise.

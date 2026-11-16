@@ -618,3 +618,14 @@ Autentificarea în doi pași și recuperarea cu coduri de unică folosință sun
 implementate; contractul, limitele, cheia de criptare, protecția la rollback și
 runbookul sunt în [AUTHENTICATOR-MFA.md](AUTHENTICATOR-MFA.md). Lansarea și
 rezultatele finale se adaugă după verificarea pe backup și pe domeniul public.
+
+MFA lansată și verificată pe cod `23a3174`: 251 teste backend pe PostgreSQL,
+1.098 verificări browser și 12 teste operaționale; audit npm fără vulnerabilități
+raportate. Backup restaurat, migrație 14 → 15 repetată idempotent, cheia verificată
+și API/UI activate fără restart DB. Proba Docker reală verifică și refuzul
+loginului legacy pentru un cont MFA, plus tokenul Finance v1 în ambele imagini.
+Rutele private, CSP, mobilul și clientul F# au trecut verificările publice.
+Detaliile și limitele sunt în documentul MFA; alertarea automată și passkeys
+rămân deschise. Următoarea etapă de produs poate aborda portabilitatea datelor și
+ștergerea contului, cu revocarea tokenurilor Finance și o politică explicită pentru
+backupuri; urmează apoi alertele de securitate și extinderea conectorului F#.
