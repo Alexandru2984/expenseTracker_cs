@@ -472,3 +472,30 @@ refuzată de Cloudflare cu 1010; verificările curl, Chromium și F# au trecut,
 iar regulile Cloudflare nu au fost modificate.
 
 Documentarea ulterioară lansării nu schimbă revizia de cod activă.
+
+## Continuare: obiective de economisire persistente
+
+[SAVINGS-GOALS.md](SAVINGS-GOALS.md) descrie funcția, contractul API, calculele,
+threat model-ul și runbook-ul. Obiectivele au țintă, valută, termen, ritm lunar,
+progres din contribuții reale introduse manual și istoric paginat. Simulatorul
+precompletează un obiectiv nou, fără mutații automate sau transferuri de bani.
+Sunt disponibile editarea, arhivarea/reactivarea, filtrarea obiectivelor atinse
+și eliminarea confirmată a contribuțiilor sau a obiectivului.
+
+Mutațiile sunt tranzacționale, cu lock per cont și versiuni; retrimiterea unei
+contribuții cu aceeași cheie nu o dublează. Valuta este fixată cât timp există
+contribuții. Sunt aplicate ownership, CSRF, contextul dintre taburi, limite de
+volum și validarea sumelor/datelor. Termenele sunt calculate pe calendar, inclusiv
+lunile incomplete și anii bisecți. Un termen anterior primei contribuții lunare
+este semnalat separat. Datele obiectivelor nu intră în exportul Finance v1.
+
+Validare locală: 204 teste backend pe PostgreSQL, fără skip; 168 aserțiuni pentru
+obiective la 1440/390/320 px, light/dark, inclusiv WCAG, conflicte și răspuns pierdut;
+444 execuții dashboard; 58 aserțiuni între taburi; 24 Finance; 4 teste deployment.
+Snapshotul EF corespunde modelului. Migrația adaugă două tabele și indexuri,
+fără rescrierea tabelelor existente. Lansarea și restore drill-ul se consemnează
+după verificarea buildului final.
+
+Următoarea etapă: notificări opt-in cu outbox, preferințe și fus orar. MFA/passkeys,
+portabilitatea/ștergerea contului, alertarea externă și backupul off-site rămân
+deschise. Nu sunt declarate implementate prin această etapă.

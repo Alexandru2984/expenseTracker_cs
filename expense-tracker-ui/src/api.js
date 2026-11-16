@@ -32,7 +32,7 @@ api.interceptors.request.use(config => {
   syncSessionBoundary()
   requireSession(config._sessionGeneration)
   const url = config.url ?? ''
-  const business = /^\/(account|subscriptions|budgets)(\/|$)/.test(url) && !/^\/subscriptions\/rates(?:\/|$)/.test(url)
+  const business = /^\/(account|subscriptions|budgets|goals)(\/|$)/.test(url) && !/^\/subscriptions\/rates(?:\/|$)/.test(url)
   if (business && !accountContext) throw new axios.CanceledError('Verifică mai întâi identitatea contului.')
   if (accountContext && (business || /^\/auth\/(refresh|logout)$/.test(url))) config.headers['X-Account-Context'] = accountContext
   const method = (config.method ?? 'get').toLowerCase()
@@ -191,6 +191,16 @@ export const budgetsApi = {
   create: (data) => api.post('/budgets', data),
   update: (id, data) => api.put(`/budgets/${encodeURIComponent(id)}`, data),
   remove: (id, version) => api.delete(`/budgets/${encodeURIComponent(id)}`, { params: { version } })
+}
+
+export const goalsApi = {
+  list: () => api.get('/goals'),
+  create: data => api.post('/goals', data),
+  update: (id, data) => api.put('/goals/' + encodeURIComponent(id), data),
+  remove: (id, version) => api.delete('/goals/' + encodeURIComponent(id), { params: { version } }),
+  history: (id, params = {}) => api.get('/goals/' + encodeURIComponent(id) + '/contributions', { params }),
+  contribute: (id, data) => api.post('/goals/' + encodeURIComponent(id) + '/contributions', data),
+  removeContribution: (id, entryId, version) => api.delete('/goals/' + encodeURIComponent(id) + '/contributions/' + encodeURIComponent(entryId), { params: { version } })
 }
 
 export const subscriptionsApi = {

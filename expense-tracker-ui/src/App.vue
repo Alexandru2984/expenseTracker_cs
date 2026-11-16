@@ -8,6 +8,7 @@ import ConfirmModal from './components/ConfirmModal.vue'
 import AccountSettings from './components/AccountSettings.vue'
 import PlanningPanel from './components/PlanningPanel.vue'
 import BudgetPanel from './components/BudgetPanel.vue'
+import GoalsPanel from './components/GoalsPanel.vue'
 import DuplicatePanel from './components/DuplicatePanel.vue'
 import PriceHistoryDialog from './components/PriceHistoryDialog.vue'
 import { Sun, Moon, Search, Download, Upload, BarChart3, ListFilter, ChevronLeft, ChevronRight, Settings } from 'lucide-vue-next'
@@ -35,6 +36,7 @@ const editingItem = ref(null), initialItem = ref(null), showForm = ref(false), i
 const historyItem = ref(null)
 const exportScope = ref('all')
 const reviewing = ref(false)
+const goalDraft = ref(null)
 const pendingIds = ref(new Set())
 const filters = ref({ search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 })
 const currentPage = computed(() => Math.floor(filters.value.skip / filters.value.take) + 1)
@@ -143,6 +145,7 @@ function resetAuthState() {
   historyItem.value = null
   exportScope.value = 'all'
   reviewing.value = false
+  goalDraft.value = null
   exportingCsv.value = false; exportingCalendar.value = false
   saving.value = false; importBusy.value = false; logoutBusy.value = false; pendingIds.value = new Set()
   error.value = null; loading.value = false; toasts.value = []
@@ -441,7 +444,8 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <PlanningPanel :data="insights" :exporting="exportingCalendar" :reviewing="reviewing" @calendar="handleCalendar" @review="handleReview" />
+          <PlanningPanel :data="insights" :exporting="exportingCalendar" :reviewing="reviewing" @calendar="handleCalendar" @review="handleReview" @goal-plan="goalDraft = $event" />
+          <GoalsPanel :suggestion="goalDraft" @toast="(m, t) => showToast(m, t)" />
           <BudgetPanel :refresh-key="summary" :categories="insights?.byCategory ?? []" @toast="(m, t) => showToast(m, t)" />
           <DuplicatePanel :refresh-key="summary" :reviewing="reviewing" @review="handleReview" />
 

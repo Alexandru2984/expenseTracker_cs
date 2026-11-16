@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:finance": "node ../scripts/finance-panel-smoke.cjs",
     "test:dashboard": "node ../scripts/dashboard-smoke.cjs",
-    "test:sessions": "node ../scripts/session-tabs-smoke.cjs"
+    "test:sessions": "node ../scripts/session-tabs-smoke.cjs",
+    "test:goals": "node ../scripts/goals-smoke.cjs"
   },
   "dependencies": {
     "axios": "^1.7.0",

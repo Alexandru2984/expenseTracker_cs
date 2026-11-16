@@ -98,6 +98,10 @@ jobs:
         working-directory: expense-tracker-ui
         run: npm run test:sessions
 
+      - name: Savings goals, contribution retries, mobile and accessibility
+        working-directory: expense-tracker-ui
+        run: npm run test:goals
+
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest

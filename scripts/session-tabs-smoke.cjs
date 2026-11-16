@@ -45,7 +45,7 @@ const server = http.createServer(async (request, response) => {
     data = { byCurrency: [], activeSubscriptions: 0, totalSubscriptions: 0, dueThisWeek: 0 };
    } else if (pathname === '/api/subscriptions/insights') data = { forecast: [], byCategory: [], upcoming: [], overdue: [], savingsOpportunities: [] };
    else if (pathname === '/api/subscriptions/duplicates') data = { checkedCount: 0, groups: [] };
-   else if (pathname === '/api/budgets') data = [];
+   else if (pathname === '/api/budgets' || pathname === '/api/goals') data = [];
    else if (pathname === '/api/account') data = { username: state.actor, email: state.actor + '@example.invalid', emailVerified: true };
    else if (pathname === '/api/subscriptions/rates/status') data = { rates: { RON: 1 }, source: 'fallback' };
    else if (pathname === '/api/subscriptions/export') { response.writeHead(200, { 'Content-Type': 'text/csv' }); response.end('synthetic'); return; }
@@ -124,7 +124,7 @@ const server = http.createServer(async (request, response) => {
   }
   // Even with all cross-tab mechanisms unavailable, the server binding refuses
   // wrong-account mutations, logout, refresh and blob downloads without replay.
-  for (const action of ["subscriptionsApi.create({name:'stale'})", 'authApi.logout()', 'subscriptionsApi.exportCsv()']) {
+  for (const action of ["goalsApi.create({name:'stale'})", "subscriptionsApi.create({name:'stale'})", 'authApi.logout()', 'subscriptionsApi.exportCsv()']) {
    state = fixture(); const ctx = await context('isolated'), reader = await harness(ctx), writer = await harness(ctx);
    assert.equal(await run(writer, "window.client.authApi.login({username:'B',password:'synthetic-password'})"), 'ok');
    assert.equal(await run(reader, 'window.client.' + action), 'ERR_CANCELED');

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { CalendarDays, TrendingUp, Sparkles, AlertCircle, Download } from 'lucide-vue-next'
 
 const props = defineProps({ data: { type: Object, default: null }, exporting: Boolean, reviewing: Boolean })
-defineEmits(['calendar', 'review'])
+defineEmits(['calendar', 'review', 'goal-plan'])
 const selectedMonth = ref('')
 const selectedSavings = ref([])
 const months = computed(() => props.data?.forecast ?? [])
@@ -91,7 +91,10 @@ function monthLabel(value) {
       </div>
       <div class="mt-4 rounded-xl bg-gray-50 dark:bg-gray-800 p-4 text-sm" aria-live="polite" aria-atomic="true">
         <p v-if="!savings.length" class="text-gray-600 dark:text-gray-300">Compară până la 3 dintre cele mai mari costuri din fiecare valută.</p>
-        <p v-for="total in savings" :key="total.currency" class="font-semibold break-words">{{ amount(total.amount) }} {{ total.currency }} / lună · aproximativ {{ amount(total.amount * 12) }} {{ total.currency }} / an</p>
+        <div v-for="total in savings" :key="total.currency" class="flex flex-wrap items-center justify-between gap-3 py-1">
+          <p class="font-semibold break-words min-w-0">{{ amount(total.amount) }} {{ total.currency }} / lună · aproximativ {{ amount(total.amount * 12) }} {{ total.currency }} / an</p>
+          <button type="button" @click="$emit('goal-plan', { currency: total.currency, monthlyContribution: Number(total.amount.toFixed(2)) })" :aria-label="'Creează un obiectiv cu economiile în ' + total.currency" class="text-xs font-semibold underline text-violet-800 dark:text-violet-300">Transformă în obiectiv</button>
+        </div>
       </div>
     </article>
   </section>
