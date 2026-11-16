@@ -46,6 +46,9 @@ class DatabaseEnvironmentTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): module.validate_database(self.model, candidate, self.image)
         self.container['Mounts'][0]['Name']='another-volume'
         with self.assertRaises(RuntimeError): module.validate_database(self.model, self.container, self.image)
+        self.container['Mounts'][0]['Name']='synthetic-data'
+        self.container['NetworkSettings']['Networks']={'another-network': {}}
+        with self.assertRaises(RuntimeError): module.validate_database(self.model, self.container, self.image)
 
     def test_rejects_mutable_images_and_published_ports(self):
         original=self.model['services']['db']['image'];self.model['services']['db']['image']='postgres:16-alpine'
