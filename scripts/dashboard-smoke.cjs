@@ -47,7 +47,7 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     const request = route.request(), url = new URL(request.url()); let data = {}, status = 200;
     const active = items.filter(s => s.isActive);
     const byCurrency = [...new Set(active.map(s => s.currency))].map(currency => ({ currency, activeCount: active.filter(s => s.currency === currency).length, monthlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost, 0), yearlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost * 12, 0) }));
-    if (url.pathname === '/api/auth/me') data = { username: 'dashboard-fixture' };
+    if (url.pathname === '/api/auth/me') data = { username: 'dashboard-fixture', accountContext: 'A'.repeat(64) };
     else if (url.pathname === '/api/auth/logout') { status = 204; data = null; }
     else if (url.pathname === '/api/budgets') {
      if (request.method() === 'POST') { budgets = [{ id: 'budget-fixture', ...request.postDataJSON(), version: budgetVersion(), updatedAt: new Date().toISOString() }]; data = { id: budgets[0].id, version: budgets[0].version }; status = 201; }
@@ -313,8 +313,8 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    let data = {}, status = 200;
    if (pathname === '/api/auth/me') {
     if (!refreshed) { initial++; if (initial <= 2) { if (initial === 2) releaseInitial(); await initialBarrier; } status = 401; }
-    else data = { username: 'shared-tabs' };
-   } else if (pathname === '/api/auth/refresh') { rotations++; await new Promise(resolve => setTimeout(resolve, 100)); refreshed = true; data = { username: 'shared-tabs' }; }
+    else data = { username: 'shared-tabs', accountContext: 'A'.repeat(64) };
+   } else if (pathname === '/api/auth/refresh') { rotations++; await new Promise(resolve => setTimeout(resolve, 100)); refreshed = true; data = { username: 'shared-tabs', accountContext: 'A'.repeat(64) }; }
    else if (pathname === '/api/subscriptions') data = { items: [], total: 0 };
    else if (pathname === '/api/subscriptions/summary') data = { byCurrency: [], totalSubscriptions: 0, activeSubscriptions: 0, dueThisWeek: 0 };
    else if (pathname === '/api/subscriptions/insights') data = { forecast: [], byCategory: [], upcoming: [], overdue: [], savingsOpportunities: [] };
@@ -342,7 +342,7 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
      markRequested(); await gate;
      await route.fulfill({ status: 200, contentType: resource === 'csv' ? 'text/csv' : 'text/calendar', body: 'PRIVATE_SYNTHETIC_EXPORT' }); return;
     }
-    if (pathname === '/api/auth/me') data = { username: 'export-race' };
+    if (pathname === '/api/auth/me') data = { username: 'export-race', accountContext: 'A'.repeat(64) };
     else if (pathname === '/api/auth/logout') status = 204;
     else if (pathname === '/api/account') data = { username: 'export-race', email: 'synthetic@example.invalid', emailVerified: true };
     else if (pathname === '/api/subscriptions') data = { items: [], total: 0 };
@@ -374,7 +374,7 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
    if (pathname === '/api/subscriptions' && route.request().method() === 'POST') {
     if (!sentWrite) { sentWrite = true; markWrite(); await writeGate; status = 401; }
     else { replayedWrites++; status = 201; data = item('replayed', 'Wrong session'); }
-   } else if (pathname === '/api/auth/me') data = { username: 'write-race' };
+   } else if (pathname === '/api/auth/me') data = { username: 'write-race', accountContext: 'A'.repeat(64) };
    else if (pathname === '/api/auth/logout') status = 204;
    else if (pathname === '/api/subscriptions') data = { items: [], total: 0 };
    else if (pathname === '/api/subscriptions/summary') data = { byCurrency: [], totalSubscriptions: 0, activeSubscriptions: 0, dueThisWeek: 0 };

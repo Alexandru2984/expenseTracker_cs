@@ -117,17 +117,19 @@ async function fetchAll() {
     subscriptions.value = list.data.items; totalItems.value = list.data.total
     summary.value = totals.data; insights.value = analysis.data
   } catch (e) {
-    if (epoch === requestEpoch && e.response?.status !== 401) error.value = 'Datele nu au putut fi actualizate. Reîncearcă încărcarea.'
+    if (epoch === requestEpoch && e.response?.status !== 401 && e.code !== 'ERR_CANCELED') error.value = 'Datele nu au putut fi actualizate. Reîncearcă încărcarea.'
   } finally { if (epoch === requestEpoch) loading.value = false }
 }
 async function bootstrapAuth() {
-  try { handleLogin((await authApi.me()).data) }
-  catch { isAuthenticated.value = false }
-  finally { authReady.value = true }
+  const epoch = authEpoch
+  try { const response = await authApi.me(); if (epoch === authEpoch) handleLogin(response.data) }
+  catch { if (epoch === authEpoch) { isAuthenticated.value = false; authReady.value = true } }
 }
 function handleLogin(data) {
-  advanceApiSession()
+  if (!/^[A-F0-9]{64}$/.test(data.accountContext ?? '')) throw new Error('Identitatea sesiunii nu a putut fi verificată. Reîncarcă pagina.')
+  advanceApiSession(data.accountContext)
   authEpoch++
+  authReady.value = true
   isAuthenticated.value = true; currentUser.value = data.username
   fetchAll(); fetchRates(); fetchAccount()
 }
@@ -142,18 +144,21 @@ function resetAuthState() {
   exportScope.value = 'all'
   reviewing.value = false
   exportingCsv.value = false; exportingCalendar.value = false
+  saving.value = false; importBusy.value = false; logoutBusy.value = false; pendingIds.value = new Set()
   error.value = null; loading.value = false; toasts.value = []
   if (confirmModal.value.visible) onCancel()
   filters.value = { search: '', sortBy: 'name', sortDesc: false, status: 'all', skip: 0, take: 10 }
 }
 async function handleLogout() {
   if (logoutBusy.value) return
+  const epoch = authEpoch
   logoutBusy.value = true
-  try { await authApi.logout(); resetAuthState() }
-  catch { showToast('Deconectarea nu a putut fi confirmată. Reîncearcă.') }
-  finally { logoutBusy.value = false }
+  try { await authApi.logout(); if (epoch === authEpoch) resetAuthState() }
+  catch (e) { if (epoch === authEpoch && e.code !== 'ERR_CANCELED') showToast('Deconectarea nu a putut fi confirmată. Reîncearcă.') }
+  finally { if (epoch === authEpoch) logoutBusy.value = false }
 }
 function onAuthLogout() { resetAuthState() }
+function onSessionBoundary() { resetAuthState(); authReady.value = false; bootstrapAuth() }
 function onSettingsClose() { showSettings.value = false; fetchAccount() }
 
 const toasts = ref([]), toastTimers = new Set()
@@ -215,48 +220,63 @@ async function handleImport(event) {
   if (!file || importBusy.value) return
   if (file.size > 1_000_000) { showToast('Fișierul CSV poate avea maximum 1 MB.'); event.target.value = ''; return }
   importBusy.value = true
+  const epoch = authEpoch
   try {
     const form = new FormData(); form.append('file', file)
     const { data } = await subscriptionsApi.importCsv(form)
+    if (epoch !== authEpoch) return
     importReport.value = data
     showToast(`Import: ${data.imported} adăugate, ${data.skipped} duplicate, ${data.rejected ?? 0} respinse.`, data.rejected ? 'error' : 'success')
     await fetchAll()
-  } catch (e) { showToast(errorMessage(e, 'Eroare la import CSV.')) }
-  finally { importBusy.value = false; event.target.value = '' }
+  } catch (e) { if (epoch === authEpoch && e.code !== 'ERR_CANCELED') showToast(errorMessage(e, 'Eroare la import CSV.')) }
+  finally { if (epoch === authEpoch) importBusy.value = false; event.target.value = '' }
 }
 async function handleSubmit(payload) {
   if (saving.value) return
   saving.value = true
+  const epoch = authEpoch
   const id = editingItem.value?.id
   try {
     if (id) await subscriptionsApi.update(id, { ...payload, expectedUpdatedAt: editingItem.value.updatedAt })
     else await subscriptionsApi.create(payload)
+    if (epoch !== authEpoch) return
     handleCancel(); await fetchAll()
+    if (epoch !== authEpoch) return
     showToast(id ? 'Abonament actualizat.' : 'Abonament adăugat.', 'success')
   } catch (e) {
+    if (epoch !== authEpoch || e.code === 'ERR_CANCELED') return
     showToast(errorMessage(e, 'Eroare la salvare. Datele introduse au fost păstrate.'))
     if (e.response?.status === 409) await fetchAll()
   }
-  finally { saving.value = false }
+  finally { if (epoch === authEpoch) saving.value = false }
 }
 async function handleDelete(id) {
   if (pendingIds.value.has(id)) return
-  pendingIds.value.add(id)
+  const epoch = authEpoch, pending = pendingIds.value
+  pending.add(id)
   try {
     if (!await askConfirm('Ștergi acest abonament? Datele lui vor fi eliminate.')) return
-    await subscriptionsApi.remove(id); await fetchAll(); showToast('Abonament șters.', 'success')
-  } catch (e) { showToast(errorMessage(e, 'Eroare la ștergere.')) }
-  finally { pendingIds.value.delete(id) }
+    if (epoch !== authEpoch) return
+    await subscriptionsApi.remove(id)
+    if (epoch !== authEpoch) return
+    await fetchAll()
+    if (epoch === authEpoch) showToast('Abonament șters.', 'success')
+  } catch (e) { if (epoch === authEpoch && e.code !== 'ERR_CANCELED') showToast(errorMessage(e, 'Eroare la ștergere.')) }
+  finally { pending.delete(id) }
 }
 async function handleStatus(item) {
   if (pendingIds.value.has(item.id)) return
-  pendingIds.value.add(item.id)
+  const epoch = authEpoch, pending = pendingIds.value
+  pending.add(item.id)
   try {
     if (item.isActive && !await askConfirm(`Suspendă „${item.name}” în tracker? Plata la furnizor se gestionează separat.`)) return
-    await subscriptionsApi.setStatus(item.id, !item.isActive); await fetchAll()
-    showToast(item.isActive ? 'Abonament suspendat în tracker.' : 'Abonament reactivat.', 'success')
-  } catch (e) { showToast(errorMessage(e, 'Starea nu a putut fi schimbată.')) }
-  finally { pendingIds.value.delete(item.id) }
+    if (epoch !== authEpoch) return
+    await subscriptionsApi.setStatus(item.id, !item.isActive)
+    if (epoch !== authEpoch) return
+    await fetchAll()
+    if (epoch === authEpoch) showToast(item.isActive ? 'Abonament suspendat în tracker.' : 'Abonament reactivat.', 'success')
+  } catch (e) { if (epoch === authEpoch && e.code !== 'ERR_CANCELED') showToast(errorMessage(e, 'Starea nu a putut fi schimbată.')) }
+  finally { pending.delete(item.id) }
 }
 async function revealForm() {
   showForm.value = true; await nextTick()
@@ -278,11 +298,12 @@ function handleDuplicate(item) { editingItem.value = null; initialItem.value = {
 function handleCancel() { editingItem.value = null; initialItem.value = null; showForm.value = false }
 function handleNew() { if (showForm.value && !editingItem.value) handleCancel(); else { editingItem.value = null; initialItem.value = null; revealForm() } }
 
-onMounted(() => { window.addEventListener('auth:logout', onAuthLogout); bootstrapAuth() })
+onMounted(() => { window.addEventListener('auth:logout', onAuthLogout); window.addEventListener('auth:boundary', onSessionBoundary); bootstrapAuth() })
 onUnmounted(() => {
   requestEpoch++; clearTimeout(searchTimer)
   for (const timer of toastTimers) clearTimeout(timer)
   window.removeEventListener('auth:logout', onAuthLogout)
+  window.removeEventListener('auth:boundary', onSessionBoundary)
 })
 </script>
 

@@ -94,6 +94,10 @@ jobs:
         working-directory: expense-tracker-ui
         run: npm run test:dashboard
 
+      - name: Cross-tab identity, cookie ordering and browser fallbacks
+        working-directory: expense-tracker-ui
+        run: npm run test:sessions
+
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest

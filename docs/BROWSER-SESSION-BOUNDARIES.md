@@ -28,7 +28,8 @@ light/dark, în trei loturi (444 execuții, cu probele comune repetate), plus 24
 verificări ale panoului Finance. Backendul neschimbat în această etapă are 177
 teste trecute pe PostgreSQL prin migrații, fără skip.
 
-Limita acestui control: generația este locală instanței SPA. Sincronizarea completă
-a schimbărilor de cont între taburi și coordonarea tuturor operațiilor care scriu
-cookie-uri necesită o rundă separată; Web Lock-ul existent coordonează refresh-ul.
-Nu se declară rezolvat întregul ciclu de viață al autentificării între taburi.
+Limita etapei inițiale era generația locală instanței SPA. Continuarea
+[CROSS-TAB-SESSIONS.md](CROSS-TAB-SESSIONS.md) adaugă coordonarea operațiilor care
+scriu cookie-uri, notificarea taburilor și legarea intenției de cont pe server.
+Documentul precizează separat limitele browserelor fără Web Locks și ale
+clienților vechi care nu trimit headerul de context.

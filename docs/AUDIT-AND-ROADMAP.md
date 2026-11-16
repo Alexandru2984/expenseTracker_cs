@@ -414,3 +414,29 @@ aserțiuni browser în trei loturi desktop/mobil light/dark; 24 verificări Fina
 pe buildul final; 4 teste de deployment. Probele autentificate folosesc numai
 date sintetice; nu s-au creat conturi sau trimis emailuri de test în producție.
 Documentarea ulterioară nu schimbă revizia de cod activă.
+
+## Continuare: identitatea contului între taburi
+
+[CROSS-TAB-SESSIONS.md](CROSS-TAB-SESSIONS.md) documentează protecția nouă pentru
+formular A trimis cu cookie-urile contului B: context opac legat de identitate,
+409 fără mutație, inclusiv pentru logout/refresh cu access expirat. Contractul
+Finance F# rămâne neschimbat; nu sunt necesare migrații.
+
+SPA coordonează login/logout/refresh și operațiile de credențiale în același Web
+Lock. Markerii dintre taburi nu conțin date de identitate sau credențiale.
+Schimbarea externă șterge formularele/datele locale și respinge răspunsurile vechi.
+Sunt acoperite fallbackurile storage/channel, notificările pierdute, un writer
+închis, ordinea refresh/login, sesiuni expirate/revocate și salvarea întârziată.
+Headerul opțional păstrează clienții existenți compatibili; limitele acestora și
+ale browserelor fără Web Locks sunt explicate explicit în document.
+
+Validare locală: 189 teste backend pe PostgreSQL prin migrații, fără skip; 53
+aserțiuni dedicate sesiunilor între taburi; 444 execuții de aserțiuni dashboard
+la 1440/390/320 px în light/dark; 24 verificări ale panoului Finance.
+Activarea și verificările publice se consemnează după lansare. Testele folosesc
+exclusiv conturi/API sintetice; nu trimit emailuri în producție.
+
+Următoarea etapă de produs: obiective de economisire persistente, apoi notificări
+opt-in cu outbox și fus orar. MFA/passkeys, backup off-site și alertare externă
+rămân priorități deschise, alături de portabilitatea/ștergerea contului. Acestea
+necesită implementare și validare separate; nu sunt declarate livrate.

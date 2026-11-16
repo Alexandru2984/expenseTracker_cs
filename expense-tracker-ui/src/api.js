@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { withSessionLock, syncSessionBoundary, publishSessionBoundary, recoverSessionBoundary, notifyAccountContextChanged } from './sessionCoordinator.js'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
@@ -7,7 +8,13 @@ const api = axios.create({
 })
 
 let sessionGeneration = 0
-export function advanceApiSession() { sessionGeneration++ }
+let accountContext = null
+const validContext = value => typeof value === 'string' && /^[A-F0-9]{64}$/.test(value)
+export function advanceApiSession(context = null) {
+  if (context !== null && !validContext(context)) throw new Error('Identitatea sesiunii nu a putut fi verificată. Reîncarcă pagina.')
+  sessionGeneration++; accountContext = context
+}
+window.addEventListener('auth:boundary', () => advanceApiSession())
 function requireSession(generation) {
   if (generation !== sessionGeneration) throw new axios.CanceledError('Contextul de autentificare s-a schimbat.')
 }
@@ -22,7 +29,12 @@ function getCookie(name) {
 // Attach the CSRF token header on state-changing requests.
 api.interceptors.request.use(config => {
   config._sessionGeneration ??= sessionGeneration
+  syncSessionBoundary()
   requireSession(config._sessionGeneration)
+  const url = config.url ?? ''
+  const business = /^\/(account|subscriptions|budgets)(\/|$)/.test(url) && !/^\/subscriptions\/rates(?:\/|$)/.test(url)
+  if (business && !accountContext) throw new axios.CanceledError('Verifică mai întâi identitatea contului.')
+  if (accountContext && (business || /^\/auth\/(refresh|logout)$/.test(url))) config.headers['X-Account-Context'] = accountContext
   const method = (config.method ?? 'get').toLowerCase()
   if (['post', 'put', 'patch', 'delete'].includes(method)) {
     const csrf = getCookie('csrf_token')
@@ -37,17 +49,20 @@ function refreshSession(generation) {
   requireSession(generation)
   if (!refreshState || refreshState.generation !== generation) {
     const rotate = async () => {
+      syncSessionBoundary()
       requireSession(generation)
       // A different tab may already have refreshed the shared cookies while we
       // waited for the lock. Recheck before rotating a single-use token again.
-      try { await api.get('/auth/me', { _skipRefresh: true }); return }
+      try {
+        const response = await api.get('/auth/me', { _skipRefresh: true })
+        if (accountContext && response.data.accountContext !== accountContext) { notifyAccountContextChanged(); throw new axios.CanceledError() }
+        return
+      }
       catch (error) { if (error.response?.status !== 401) throw error }
       requireSession(generation)
       await api.post('/auth/refresh')
     }
-    const operation = navigator.locks?.request
-      ? navigator.locks.request('expense-session-refresh', rotate)
-      : rotate()
+    const operation = withSessionLock(rotate)
     const state = { generation, promise: null }
     state.promise = operation.finally(() => { if (refreshState === state) refreshState = null })
     refreshState = state
@@ -57,11 +72,21 @@ function refreshSession(generation) {
 
 // On 401 for a normal call, try one silent refresh then replay the request.
 api.interceptors.response.use(
-  res => { requireSession(res.config._sessionGeneration); return res },
+  res => { syncSessionBoundary(); requireSession(res.config._sessionGeneration); return res },
   async err => {
     const original = err.config
+    syncSessionBoundary()
     if (original) requireSession(original._sessionGeneration)
     const status = err.response?.status
+    let problem = err.response?.data
+    if (status === 409 && problem instanceof Blob && problem.size <= 8192) {
+      try { problem = JSON.parse(await problem.text()) } catch { /* Not a context problem. */ }
+      if (original) requireSession(original._sessionGeneration)
+    }
+    if (status === 409 && problem?.code === 'account_context_changed') {
+      notifyAccountContextChanged()
+      return Promise.reject(new axios.CanceledError('Contul activ s-a schimbat.'))
+    }
     const url = original?.url ?? ''
     const isAuthCall = /\/auth\/(login|register|refresh|logout|verify-email|resend-code|forgot-password|reset-password)/.test(url)
 
@@ -84,26 +109,75 @@ api.interceptors.response.use(
   }
 )
 
+async function discoverIdentity() {
+  const read = () => withSessionLock(() => {
+    recoverSessionBoundary()
+    return api.get('/auth/me', { _skipRefresh: true })
+  }, 'shared')
+  try { return await read() }
+  catch (error) {
+    if (error.response?.status !== 401) throw error
+    await refreshSession(sessionGeneration)
+    return read()
+  }
+}
+
+async function cookieMutation(method, url, data, { identity = false, clear = false } = {}) {
+  const generation = sessionGeneration, expectedContext = accountContext
+  syncSessionBoundary(); requireSession(generation)
+  return withSessionLock(async () => {
+    syncSessionBoundary(); requireSession(generation)
+    if (identity) {
+      if (!expectedContext) throw new axios.CanceledError('Identitate absentă.')
+      let current
+      try { current = await api.get('/auth/me', { _skipRefresh: true }) }
+      catch (error) {
+        if (error.response?.status !== 401) throw error
+        await api.post('/auth/refresh')
+        current = await api.get('/auth/me', { _skipRefresh: true })
+      }
+      if (current.data.accountContext !== expectedContext) { notifyAccountContextChanged(); throw new axios.CanceledError() }
+    }
+    requireSession(generation)
+    const transition = publishSessionBoundary('changing')
+    sessionGeneration++ // Cancel pending requests while retaining this operation's binding.
+    try {
+      const response = await api.request({ method, url, data, _skipRefresh: true })
+      if (response.data?.accountContext) {
+        if (!validContext(response.data.accountContext)) throw new Error('Răspuns de autentificare invalid.')
+        accountContext = response.data.accountContext
+      }
+      if (clear) accountContext = null
+      return response
+    } finally { publishSessionBoundary('ready', transition) }
+  }).catch(error => {
+    if (identity && error.response?.status === 401 && error.config?._sessionGeneration === sessionGeneration) {
+      window.dispatchEvent(new Event('auth:logout'))
+    }
+    throw error
+  })
+}
+
 export const authApi = {
-  login: (data) => api.post('/auth/login', data),
+  login: (data) => cookieMutation('post', '/auth/login', data),
   register: (data) => api.post('/auth/register', data),
-  verifyEmail: (data) => api.post('/auth/verify-email', data),
+  verifyEmail: (data) => cookieMutation('post', '/auth/verify-email', data),
   resendCode: (data) => api.post('/auth/resend-code', data),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
-  resetPassword: (data) => api.post('/auth/reset-password', data),
-  logout: () => api.post('/auth/logout'),
-  me: () => api.get('/auth/me')
+  resetPassword: (data) => cookieMutation('post', '/auth/reset-password', data),
+  logout: () => cookieMutation('post', '/auth/logout', undefined, { clear: true }),
+  me: discoverIdentity
 }
 
 export const accountApi = {
   get: () => api.get('/account'),
-  changePassword: (data) => api.post('/account/change-password', data),
+  changePassword: (data) => cookieMutation('post', '/account/change-password', data, { identity: true }),
   changeEmail: (data) => api.post('/account/change-email', data),
-  confirmEmailChange: (data) => api.post('/account/confirm-email-change', data),
+  confirmEmailChange: (data) => cookieMutation('post', '/account/confirm-email-change', data, { identity: true }),
   cancelEmailChange: () => api.delete('/account/pending-email'),
-  logoutAll: () => api.post('/account/logout-all'),
+  logoutAll: () => cookieMutation('post', '/account/logout-all', undefined, { identity: true, clear: true }),
   sessions: () => api.get('/account/sessions'),
-  revokeSession: (id) => api.delete(`/account/sessions/${encodeURIComponent(id)}`)
+  revokeSession: (id) => cookieMutation('delete', `/account/sessions/${encodeURIComponent(id)}`, undefined, { identity: true })
 }
 
 export const financeIntegrationApi = {
