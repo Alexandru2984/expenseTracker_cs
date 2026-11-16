@@ -180,11 +180,21 @@ def with_security_headers(config):
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--image')
     parser.add_argument('--check-deletions-container',help='Read-only check of an isolated restored container against the preserved deletion ledger')
+    parser.add_argument('--snapshot-deletions-container',help='Preserve the latest deletion receipts privately before planned recovery')
     parser.add_argument('--database-user',default='postgres')
     parser.add_argument('--database',default='postgres')
     parser.add_argument('--migrate',action='store_true',help='Apply reviewed forward migrations, after an isolated restore and compatibility drill')
     args=parser.parse_args()
     if os.geteuid()!=0:raise SystemExit('Run with sudo')
+    if args.snapshot_deletions_container:
+        if args.image or args.migrate or args.check_deletions_container:raise SystemExit('Choose one operation')
+        directory=Path('/var/backups/expense-tracker');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+        with (directory/'.deploy.lock').open('a') as lock:
+            os.fchmod(lock.fileno(),0o600);fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            records=preserve_deletion_receipts(directory,collect_deletion_receipts(args.snapshot_deletions_container,args.database_user,args.database))
+            verify_deletion_receipts(args.snapshot_deletions_container,args.database_user,args.database,records)
+        print('Latest deletion receipts preserved privately:',len(records))
+        return
     if args.check_deletions_container:
         if args.image or args.migrate:raise SystemExit('Choose deletion check or deployment')
         path=Path('/var/backups/expense-tracker/account-deletion-ledger.json')

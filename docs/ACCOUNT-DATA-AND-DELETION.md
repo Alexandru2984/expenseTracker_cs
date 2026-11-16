@@ -92,7 +92,15 @@ Se verifică baza activă și restaurarea izolată; un User prezent în evidenț
 blochează deploymentul înainte de activare. O ștergere concurentă cu dumpul poate
 cere refacerea backupului. Verificarea nu șterge automat utilizatori.
 
-Pentru o restaurare separată, cu API-ul oprit/izolat:
+Înainte de restaurarea planificată, colectează evidența din baza încă disponibilă:
+
+```bash
+sudo python3 scripts/deploy-finance-integration.py \
+  --snapshot-deletions-container NUME_CONTAINER_CURENT \
+  --database-user UTILIZATOR_DB --database NUME_DB
+```
+
+Pentru copia restaurată separat, cu API-ul oprit/izolat:
 
 ```bash
 sudo python3 scripts/deploy-finance-integration.py \
