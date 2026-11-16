@@ -151,3 +151,46 @@ Nu rula migrații Down: ar elimina evidența. Rollbackul API/UI păstrează DB �
 Testele folosesc date sintetice și PostgreSQL temporar. Nu se exercită ștergerea,
 exportul personal sau trimiterea de mesaje pe conturi de producție. Dovezile
 finale ale lansării se adaugă după verificare.
+
+## Lansare verificată
+
+Cod activ `18517ef1f027270aea6b69e218065fb8f81c630b` pe expenses.micutu.com;
+HEAD-ul documentației finale poate fi ulterior buildului. Labelul imaginii și
+build-revision.txt indică intenționat acest commit al codului lansat.
+
+- 263 teste backend pe PostgreSQL temporar, zero skip; model EF fără schimbări
+  în afara migrației. Testele noi acoperă toate secțiunile, absența secretelor și
+  datelor străine, confirmare/MFA/backoff, cascade, rollback, concurență,
+  revocarea sesiunii în timpul lock-ului, snapshot concurent și depășirea limitei.
+- 1.152 verificări browser: date cont 144, dashboard 436, Finance 24, sesiuni 68,
+  obiective 168, notificări 132, MFA 180. Matrice desktop/mobil 320/390/1440 px,
+  light/dark, WCAG, răspuns pierdut fără retry, închidere dialog în timpul
+  ștergerii și export întârziat după logout. Verificarea MFA a fost sincronizată
+  cu terminarea stării busy, pentru a evita un snapshot axe între două stări DOM.
+- 17 teste operaționale; audit npm fără vulnerabilități raportate, restore NuGet
+  cu audit complet și erori pe avertismentele de vulnerabilitate, builduri reușite.
+  Testele și auditul au rulat local; nu se afirmă un run CI remote.
+- Imaginea Alpine finală a fost exercitată cu doi utilizatori sintetici și
+  PostgreSQL fără rețea externă: arhivă proprie fără secrete, parolă/MFA,
+  ștergere și receipt, refuzul JWT/Finance vechi, al doilea cont păstrat. Imaginea
+  veche refuză contul eliminat și continuă citirea Finance a celuilalt cont.
+  Reintroducerea intenționată a UUID-ului șters în copia izolată a fost respinsă
+  de verificarea reală a evidenței. Containerele temporare au fost eliminate.
+- Backup privat `/var/backups/expense-tracker/deploy-20261116T145615Z` restaurat
+  în izolare; avea zero utilizatori/abonamente și zero receipts. Migrația 15 → 16,
+  repetarea idempotentă, query-urile API vechi/noi și verificarea cheii MFA curente
+  și candidate au trecut înaintea aplicării în producție. Guardul cu receipts
+  ne-goale a fost exercitat separat pe date sintetice.
+- Health public 200; 14 rute private anonime 401/no-store; nonce CSP distinct și
+  revizie UI/imagine corectă. Chromium 390 px pe #data: login, fără date private,
+  overflow, erori JavaScript sau încălcări CSP. F# HttpClient verifică trei rute
+  anonime 401/no-store. Comenzile de snapshot/check au trecut și după migrație.
+- API non-root sănătos, zero restarturi după activare și fără erori de pornire.
+  ID-ul și StartedAt ale DB au rămas identice. Pinul Compose corespunde imaginii;
+  dry-run implicit păstrează API/DB Running. Cheile MFA/JWT/SMTP nu apar în mediul
+  DB. Nu s-au creat/șters conturi și nu s-au trimis emailuri de test în producție.
+
+Verdict tehnic: criteriile acestei etape au trecut. Retenția globală a copiilor,
+sincronizarea continuă a receipts, backupul off-site, alertarea externă și
+restaurarea/importul JSON automat rămân puncte deschise, explicate fără garanții
+fictive de ștergere completă ori RPO zero.

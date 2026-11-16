@@ -154,7 +154,7 @@ intenționat commitul codului lansat.
 - 251 teste backend trecute, zero skip, pe PostgreSQL temporar; modelul EF nu are
   schimbări în afara migrației. Restore NuGet cu audit pentru toate dependențele
   și erori la avertismentele de vulnerabilități a trecut.
-- 1.098 verificări browser: dashboard 436, Finance 24, sesiuni 58, obiective 168,
+- 998 verificări browser: dashboard 436, Finance 24, sesiuni 58, obiective 168,
   notificări 132, MFA 180. Testele MFA acoperă light/dark la 320/390/1440 px,
   inclusiv WCAG și păstrarea tokenului Finance în interfață.
 - 12 teste de operațiuni, instalare npm curată fără scripts, npm audit fără
@@ -186,3 +186,8 @@ intenționat commitul codului lansat.
 
 Verdict tehnic: criteriile acestei lansări au trecut. TOTP rămâne opțional;
 alertarea externă, passkeys și un exercițiu uman de incidente rămân puncte deschise.
+
+Corecție de raportare: totalul browser al acestei etape a fost însumat inițial
+greșit ca 1.098. Cele șase rezultate păstrate sunt 436 + 24 + 58 + 168 + 132 +
+180 = 998. Nu s-au schimbat rezultatele individuale. Evidența privată a lansării
+a fost corectată cu istoric al modificării.

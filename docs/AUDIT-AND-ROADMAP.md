@@ -620,7 +620,7 @@ runbookul sunt în [AUTHENTICATOR-MFA.md](AUTHENTICATOR-MFA.md). Lansarea și
 rezultatele finale se adaugă după verificarea pe backup și pe domeniul public.
 
 MFA lansată și verificată pe cod `23a3174`: 251 teste backend pe PostgreSQL,
-1.098 verificări browser și 12 teste operaționale; audit npm fără vulnerabilități
+998 verificări browser și 12 teste operaționale; audit npm fără vulnerabilități
 raportate. Backup restaurat, migrație 14 → 15 repetată idempotent, cheia verificată
 și API/UI activate fără restart DB. Proba Docker reală verifică și refuzul
 loginului legacy pentru un cont MFA, plus tokenul Finance v1 în ambele imagini.
@@ -638,3 +638,13 @@ tranzacțională cu confirmare/MFA și verificarea restaurărilor față de evid
 [ACCOUNT-DATA-AND-DELETION.md](ACCOUNT-DATA-AND-DELETION.md). Activarea se
 consemnează după probe; nu se declară eliminarea automată a copiilor din F#,
 backupuri, loguri sau dispozitivele utilizatorului.
+
+Arhiva/ștergerea sunt lansate pe cod `18517ef`: 263 teste backend, 1.152 verificări
+browser și 17 teste operaționale. Backup restaurat, migrație 15 → 16 repetată
+idempotent, verificare MFA și guard de ștergeri trecute; fără restart DB.
+Proba Alpine cu date sintetice confirmă ștergerea și revocarea Finance proprii,
+păstrarea celuilalt cont și refuzul reapariției unui cont la restore. Domeniul
+public, mobilul și clientul F# au trecut verificările. Corectat separat totalul
+etapei MFA anterioare la 998, după rezultatele individuale păstrate.
+Următoarele priorități: retenția/backupul off-site și evidența continuă a
+ștergerilor, alerte de securitate, apoi extinderea conectorului Finance și passkeys.
