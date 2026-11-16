@@ -15,6 +15,8 @@ public class AppDbContext : DbContext
 
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
     public DbSet<MonthlyBudget> Budgets => Set<MonthlyBudget>();
+    public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
+    public DbSet<GoalContribution> GoalContributions => Set<GoalContribution>();
     public DbSet<SubscriptionPriceChange> SubscriptionPriceChanges => Set<SubscriptionPriceChange>();
 
     public Task<User?> FindUserByUsernameAsync(string username)
@@ -60,6 +62,15 @@ public class AppDbContext : DbContext
             }
         }
         SubscriptionPriceChanges.AddRange(changes);
+        foreach (var entry in ChangeTracker.Entries<SavingsGoal>())
+        {
+            if (entry.State == EntityState.Added) entry.Entity.CreatedAt = now;
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+                entry.Entity.Version = Guid.NewGuid();
+            }
+        }
         return SaveWithHistoryAsync(changes, cancellationToken);
     }
 
@@ -77,6 +88,33 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<SavingsGoal>(entity =>
+        {
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_SavingsGoals_Amounts", "\"TargetAmount\" > 0 AND \"TargetAmount\" <= 1000000 AND \"MonthlyContribution\" >= 0 AND \"MonthlyContribution\" <= 1000000");
+                table.HasCheckConstraint("CK_SavingsGoals_Currency", "\"Currency\" ~ '^[A-Z]{3}$'");
+            });
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.TargetAmount).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.MonthlyContribution).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt, e.Id });
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<GoalContribution>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint("CK_GoalContributions_Amount", "\"Amount\" > 0 AND \"Amount\" <= 1000000"));
+            entity.HasKey(e => new { e.GoalId, e.Id });
+            entity.Property(e => e.Amount).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.Note).HasMaxLength(200).IsRequired();
+            entity.HasIndex(e => new { e.GoalId, e.ContributedOn, e.CreatedAt, e.Id });
+            entity.HasOne(e => e.Goal).WithMany(e => e.Contributions).HasForeignKey(e => e.GoalId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<SubscriptionPriceChange>(entity =>
         {

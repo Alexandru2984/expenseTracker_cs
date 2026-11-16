@@ -22,6 +22,38 @@ namespace ExpenseTracker.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ExpenseTracker.Api.Models.GoalContribution", b =>
+                {
+                    b.Property<Guid>("GoalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly>("ContributedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("GoalId", "Id");
+
+                    b.HasIndex("GoalId", "ContributedOn", "CreatedAt", "Id");
+
+                    b.ToTable("GoalContributions", t =>
+                        {
+                            t.HasCheckConstraint("CK_GoalContributions_Amount", "\"Amount\" > 0 AND \"Amount\" <= 1000000");
+                        });
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Models.MonthlyBudget", b =>
                 {
                     b.Property<Guid>("Id")
@@ -108,6 +140,64 @@ namespace ExpenseTracker.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.SavingsGoal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("MonthlyContribution")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("TargetAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("TargetDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAt", "Id");
+
+                    b.ToTable("SavingsGoals", t =>
+                        {
+                            t.HasCheckConstraint("CK_SavingsGoals_Amounts", "\"TargetAmount\" > 0 AND \"TargetAmount\" <= 1000000 AND \"MonthlyContribution\" >= 0 AND \"MonthlyContribution\" <= 1000000");
+
+                            t.HasCheckConstraint("CK_SavingsGoals_Currency", "\"Currency\" ~ '^[A-Z]{3}$'");
+                        });
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Models.SubscriptionItem", b =>
@@ -335,6 +425,17 @@ namespace ExpenseTracker.Api.Migrations
                     b.ToTable("VerificationCodes");
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Models.GoalContribution", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.SavingsGoal", "Goal")
+                        .WithMany("Contributions")
+                        .HasForeignKey("GoalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Goal");
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Models.MonthlyBudget", b =>
                 {
                     b.HasOne("ExpenseTracker.Api.Models.User", "User")
@@ -347,6 +448,17 @@ namespace ExpenseTracker.Api.Migrations
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Models.RefreshToken", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.SavingsGoal", b =>
                 {
                     b.HasOne("ExpenseTracker.Api.Models.User", "User")
                         .WithMany()
@@ -388,6 +500,11 @@ namespace ExpenseTracker.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.SavingsGoal", b =>
+                {
+                    b.Navigation("Contributions");
                 });
 #pragma warning restore 612, 618
         }
