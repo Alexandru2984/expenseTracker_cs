@@ -172,7 +172,7 @@ public class AuthController : ControllerBase
         if(challenge is null)return Unauthorized(MfaRestart());
         await using var transaction=_db.Database.IsRelational()?await _db.Database.BeginTransactionAsync(ct):null;
         try {await _verification.LockAccountAsync(challenge.User);}
-        catch(DbUpdateConcurrencyException){return Unauthorized(LoginFailed());}
+        catch(DbUpdateConcurrencyException){return Unauthorized(MfaRestart());}
         if(_db.Database.IsRelational())await _db.Entry(challenge).ReloadAsync(ct);
         var user=challenge.User;var now=_mfa.Now;
         if(challenge.ConsumedAt is not null||challenge.ExpiresAt<=now||challenge.Attempts>=5||!user.MfaEnabled

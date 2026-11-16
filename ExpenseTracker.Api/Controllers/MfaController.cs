@@ -45,8 +45,13 @@ public sealed class MfaController(AppDbContext db, VerificationService verificat
         var user=await Locked(ct);if(user is null)return Changed();
         if(user.MfaEnabled)return Conflict(new ProblemDetails {Title="MFA este deja activată."});
         if(!user.EmailVerified)return BadRequest(new ProblemDetails {Title="Verifică adresa de email înainte de a configura MFA."});
-        if(!PasswordRules.Verify(request.CurrentPassword,user.PasswordHash))return Invalid();
         var now=clock.GetUtcNow().UtcDateTime;
+        if(LoginProtection.IsBlocked(user,now))return Invalid();
+        if(!PasswordRules.Verify(request.CurrentPassword,user.PasswordHash))
+        {
+            LoginProtection.Fail(user,now);await db.SaveChangesAsync(ct);
+            if(tx is not null)await tx.CommitAsync(ct);return Invalid();
+        }
         if(user.MfaSetupStartedAt>now.AddSeconds(-60))
         {
             Response.Headers.RetryAfter="60";return StatusCode(429,new ProblemDetails {Title="Așteaptă un minut înainte de a reîncepe configurarea."});
@@ -54,6 +59,7 @@ public sealed class MfaController(AppDbContext db, VerificationService verificat
         var secret=Totp.NewSecret();
         user.MfaSetupId=Guid.NewGuid();user.MfaPendingSecret=secrets.Protect(user.Id,secret);
         user.MfaSetupStartedAt=now;user.MfaPendingExpiresAt=now.AddMinutes(10);user.MfaSetupAttempts=0;
+        LoginProtection.Reset(user);
         await db.SaveChangesAsync(ct);if(tx is not null)await tx.CommitAsync(ct);
         var uri="otpauth://totp/"+Uri.EscapeDataString("Expense Tracker:"+user.Username)
             +"?secret="+secret+"&issuer=Expense%20Tracker&algorithm=SHA1&digits=6&period=30";

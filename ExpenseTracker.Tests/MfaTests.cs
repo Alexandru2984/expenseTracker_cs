@@ -251,6 +251,20 @@ public class MfaTests(TestApiFactory factory)
     }
 
     [Fact]
+    public async Task Enrollment_reauthentication_has_persistent_account_backoff()
+    {
+        using var app=App();var (owner,id)=await Account(app);
+        for(var i=0;i<5;i++)
+            Assert.Equal(HttpStatusCode.BadRequest,(await owner.PostAsJsonAsync("/api/account/mfa/setup",new {currentPassword="wrong"})).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PostAsJsonAsync("/api/account/mfa/setup",new {currentPassword=Password})).StatusCode);
+        using var scope=app.Services.CreateScope();var db=scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user=await db.Users.SingleAsync(u=>u.Id==id);Assert.Equal(5,user.LoginFailureCount);
+        Assert.True(user.LoginBlockedUntil>DateTime.UtcNow);Assert.Null(user.MfaPendingSecret);
+        user.LoginBlockedUntil=DateTime.UtcNow.AddSeconds(-1);await db.SaveChangesAsync();
+        await Begin(owner);await db.Entry(user).ReloadAsync();Assert.Equal(0,user.LoginFailureCount);
+    }
+
+    [Fact]
     public async Task Pending_challenges_are_bounded_and_canceling_releases_a_slot()
     {
         using var app=App();var (owner,id)=await Account(app);await Enable(owner);

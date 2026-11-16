@@ -21,6 +21,7 @@ nu sunt salvate în localStorage, sessionStorage sau fișiere descărcate automa
   Întoarcerea la formularul de login anulează challenge-ul deținut.
 - Eșecurile sunt legate de cont prin backoff-ul persistent existent, inclusiv
   între challenges și IP-uri. Parola corectă singură nu resetează contorul MFA.
+  Reautentificarea pentru configurare are același backoff persistent.
   Limitarea HTTP existentă rămâne activă. Configurarea expiră în zece minute,
   are cinci încercări și un minut între porniri.
 - Codurile de recuperare au câte 80 biți aleatori, hash SHA-256 cu namespace și
@@ -97,7 +98,9 @@ peste date noi. Testul PostgreSQL verifică respingerea scrierii de parolă lega
 2. **Blast radius:** o copie DB fără cheia API expune hashuri MFA, ciphertext și
    metadate, alături de datele financiare existente. Compromiterea completă a
    aplicației/VPS poate decripta secretele tuturor conturilor MFA și accesa datele
-   tuturor utilizatorilor. Numărul efectiv se măsoară la backup. Costul/ALE nu are
+   tuturor utilizatorilor. Un backup complet include cheia și DB; compromiterea
+   lui poate expune secretele tuturor conturilor MFA. Numărul efectiv se măsoară
+   la backup. Costul/ALE nu are
    date suficiente pentru o estimare credibilă; nu se inventează.
 3. **Detecție:** folosirea unui cod de recuperare scrie warning cu ID de cont,
    fără cod, email sau secret. HTTP 401/429 repetate și erorile decriptării/CLI
