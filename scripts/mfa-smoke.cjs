@@ -74,6 +74,9 @@ const codes=Array.from({length:10},(_,i)=>'ABCDE-F0123-45678-'+String(i).padStar
    const qr=panel.getByRole('img',{name:'Cod QR secret pentru configurarea autentificatorului'});await qr.waitFor();
    assert.match(await qr.getAttribute('src'),/^data:image\/png;base64,/);assert.equal(await panel.getByLabel('Cheie manuală MFA',{exact:true}).inputValue(),secret);checks+=2;
    const audit=async selector=>{
+    // QR rendering precedes the final status request. Audit the enabled form,
+    // after busy state has settled, rather than mixing two DOM states in axe.
+    await page.waitForFunction(()=>{const button=document.querySelector('section[aria-labelledby="mfa-title"] button[type="submit"]');return !button||(!button.disabled&&getComputedStyle(button).opacity==='1');});
     await page.waitForFunction(()=>!document.querySelector('.fixed[aria-live="polite"]')?.textContent?.trim());
     const result=await new AxeBuilder({page}).include(selector).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
     assert.deepEqual(result.violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target),details:v.nodes.map(n=>n.failureSummary)})),[],width+'/'+theme);checks++;
