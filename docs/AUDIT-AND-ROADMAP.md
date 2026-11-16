@@ -532,3 +532,30 @@ obiective/sesiuni/Finance. Nu s-au creat conturi sau trimis emailuri în produc�
 Commiturile sunt locale, cu identitatea Git existentă, fără atribuire AI.
 Nu s-a făcut push sau rulat workflow-ul remote. Documentarea ulterioară nu
 schimbă revizia de cod activă.
+
+## Continuare: notificări opt-in și separarea secretelor DB
+
+[NOTIFICATIONS-AND-OUTBOX.md](NOTIFICATIONS-AND-OUTBOX.md) descrie preferințele,
+programarea IANA/DST, istoricul, privacitatea și runbook-ul. Rezumatele sunt opt-in,
+la email verificat, cel mult unul pe zi locală; numele necesită alegere separată.
+Previzualizarea nu trimite email. SMTP nu primește sume, note, descrieri sau linkuri
+personale. Consimțământul este legat de inbox, iar schimbarea emailului oprește
+notificările. Outbox-ul persistă numai metadata, cu claim/lease, retry limitat
+pentru erori sigure și stare Uncertain fără retry automat pentru acceptare ambiguă.
+
+Au trecut 228 teste backend pe PostgreSQL, fără skip; 132 aserțiuni pentru
+notificări, 444 dashboard, 168 obiective, 58 între taburi și 24 Finance.
+Matricea acoperă 1440/390/320 px în light/dark și WCAG. Au fost corectate și
+afișarea numelor/emailurilor lungi și contrastul panoului nou. Sunt păstrate
+contractul Finance v1 și protecțiile de sesiune. Imaginea Alpine include acum
+tzdata; o probă în containerul real confirmă fusurile IANA și tranzițiile DST.
+
+Auditul a confirmat că DB moștenește inutil 14 variabile ale aplicației, inclusiv
+secrete JWT/SMTP; valorile nu au fost afișate. Sursa Compose elimină env_file din
+DB și fixează exact imaginea activă prin digest. Scriptul dedicat și șase teste
+noi verifică recrearea sigură: credențiale/PGDATA, imagine, volum, rețea, porturi,
+backup restaurat și schimbări concurente. Sunt 10 teste locale de operațiuni în
+total. Activarea necesită recrearea controlată a containerului DB, cu păstrarea
+datelor; nu este declarată efectuată numai prin editarea sursei.
+[Runbook](DATABASE-ENVIRONMENT-ISOLATION.md). Rezultatele activării și migrației
+13 → 14 se consemnează după lansare. Probele SMTP sunt exclusiv sintetice.

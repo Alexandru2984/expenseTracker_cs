@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import FinanceIntegrationPanel from './FinanceIntegrationPanel.vue'
 import SessionPanel from './SessionPanel.vue'
+import NotificationPanel from './NotificationPanel.vue'
 import { useDialog } from '../useDialog.js'
 import { useCooldown } from '../useCooldown.js'
 import { accountApi, authApi } from '../api.js'
@@ -157,9 +158,9 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
           <!-- Account summary -->
           <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4">
             <p class="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1">Cont</p>
-            <p class="font-bold dark:text-white">{{ account.username }}</p>
+            <p class="font-bold dark:text-white break-words">{{ account.username }}</p>
             <div class="flex flex-wrap items-center gap-2 mt-2 text-sm">
-              <span class="text-gray-500 dark:text-gray-400">{{ account.email ?? 'fără email' }}</span>
+              <span class="min-w-0 break-all text-gray-500 dark:text-gray-400">{{ account.email ?? 'fără email' }}</span>
               <span v-if="account.email && account.emailVerified" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
                 <ShieldCheck :size="12" /> Verificat
               </span>
@@ -205,6 +206,7 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
             <button :disabled="emailBusy" class="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Verifică adresa curentă</button>
           </form>
 
+          <NotificationPanel :email="account.email ?? ''" :verified="account.emailVerified" @toast="(...args) => emit('toast', ...args)" />
           <FinanceIntegrationPanel @toast="(...args) => emit('toast', ...args)" />
           <SessionPanel @toast="(...args) => emit('toast', ...args)" @logout="emit('logout')" />
 

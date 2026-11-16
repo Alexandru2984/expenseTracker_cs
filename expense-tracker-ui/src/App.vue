@@ -133,6 +133,7 @@ function handleLogin(data) {
   authEpoch++
   authReady.value = true
   isAuthenticated.value = true; currentUser.value = data.username
+  onSettingsHash()
   fetchAll(); fetchRates(); fetchAccount()
 }
 function resetAuthState() {
@@ -162,7 +163,12 @@ async function handleLogout() {
 }
 function onAuthLogout() { resetAuthState() }
 function onSessionBoundary() { resetAuthState(); authReady.value = false; bootstrapAuth() }
-function onSettingsClose() { showSettings.value = false; fetchAccount() }
+function onSettingsHash() { if (isAuthenticated.value && window.location.hash === '#notifications') showSettings.value = true }
+function onSettingsClose() {
+  showSettings.value = false
+  if (window.location.hash === '#notifications') history.replaceState(null, '', window.location.pathname + window.location.search)
+  fetchAccount()
+}
 
 const toasts = ref([]), toastTimers = new Set()
 let toastId = 0
@@ -301,12 +307,13 @@ function handleDuplicate(item) { editingItem.value = null; initialItem.value = {
 function handleCancel() { editingItem.value = null; initialItem.value = null; showForm.value = false }
 function handleNew() { if (showForm.value && !editingItem.value) handleCancel(); else { editingItem.value = null; initialItem.value = null; revealForm() } }
 
-onMounted(() => { window.addEventListener('auth:logout', onAuthLogout); window.addEventListener('auth:boundary', onSessionBoundary); bootstrapAuth() })
+onMounted(() => { window.addEventListener('hashchange', onSettingsHash); window.addEventListener('auth:logout', onAuthLogout); window.addEventListener('auth:boundary', onSessionBoundary); bootstrapAuth() })
 onUnmounted(() => {
   requestEpoch++; clearTimeout(searchTimer)
   for (const timer of toastTimers) clearTimeout(timer)
   window.removeEventListener('auth:logout', onAuthLogout)
   window.removeEventListener('auth:boundary', onSessionBoundary)
+  window.removeEventListener('hashchange', onSettingsHash)
 })
 </script>
 
@@ -364,7 +371,7 @@ onUnmounted(() => {
 
         <main class="max-w-6xl mx-auto px-4 py-8 space-y-6">
           <div class="flex flex-wrap items-end justify-between gap-4">
-            <div class="min-w-0"><p class="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Finanțele tale, mai clare</p><h1 class="text-2xl sm:text-3xl font-bold tracking-tight mt-2">Bună, {{ currentUser }}.</h1><p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Toate abonamentele într-un loc. Mai puține surprize la final de lună.</p></div>
+            <div class="min-w-0"><p class="text-xs font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Finanțele tale, mai clare</p><h1 class="text-2xl sm:text-3xl font-bold tracking-tight mt-2 break-words">Bună, {{ currentUser }}.</h1><p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Toate abonamentele într-un loc. Mai puține surprize la final de lună.</p></div>
             <a href="#subscriptions" class="text-sm font-semibold text-indigo-600 dark:text-indigo-300 rounded-lg px-3 py-2 bg-indigo-50 dark:bg-indigo-500/10">Vezi abonamentele ↓</a>
           </div>
           <div v-if="error" role="alert" class="bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 rounded-xl p-4 text-sm">{{ error }} <button type="button" @click="fetchAll" class="underline font-bold mt-2 sm:mt-0 sm:ml-2">Reîncearcă</button></div>

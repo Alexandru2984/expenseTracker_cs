@@ -1,4 +1,5 @@
 'use strict';
+const notificationFixture = require('./notification-fixture.cjs');
 // Synthetic API contract only; no sessions, SMTP, production database or real tokens.
 const http=require('node:http'), fs=require('node:fs'), path=require('node:path'), assert=require('node:assert/strict');
 const dependencies=path.resolve(__dirname,'../expense-tracker-ui');
@@ -22,7 +23,8 @@ const AxeBuilder=require(require.resolve('@axe-core/playwright',{paths:[dependen
    let tokens=[];const fake='fin_'+'a'.repeat(43);const id='00000001-0000-0000-0000-000000000000';
    await page.route('**/api/**',async route=>{
     const request=route.request(),url=new URL(request.url());let data={};let status=200;
-    if(url.pathname==='/api/auth/me')data={username:'synthetic-user',accountContext:'A'.repeat(64)};
+    if(url.pathname.startsWith('/api/account/notifications'))data=notificationFixture(url.pathname);
+    else if(url.pathname==='/api/auth/me')data={username:'synthetic-user',accountContext:'A'.repeat(64)};
     else if(url.pathname==='/api/account')data={username:'synthetic-user',email:'fixture@example.invalid',emailVerified:true,createdAt:new Date().toISOString()};
     else if(url.pathname==='/api/account/finance-tokens'){
      if(request.method()==='POST'){tokens=[{id,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+86400000).toISOString()}];data={id,token:fake,expiresAt:tokens[0].expiresAt};}

@@ -203,6 +203,14 @@ export const goalsApi = {
   removeContribution: (id, entryId, version) => api.delete('/goals/' + encodeURIComponent(id) + '/contributions/' + encodeURIComponent(entryId), { params: { version } })
 }
 
+export const notificationsApi = {
+  get: () => api.get('/account/notifications'),
+  save: data => api.put('/account/notifications', data, { headers: { 'X-Notification-Recipient': data.recipientContext } }),
+  zones: () => api.get('/account/notifications/time-zones'),
+  preview: () => api.get('/account/notifications/preview'),
+  history: () => api.get('/account/notifications/history')
+}
+
 export const subscriptionsApi = {
   getAll: (params = {}) => api.get('/subscriptions', { params }),
   getById: (id) => api.get(`/subscriptions/${id}`),

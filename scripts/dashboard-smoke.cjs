@@ -1,6 +1,7 @@
 'use strict';
 // Browser behavior uses a synthetic API; backend/ownership is verified separately.
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
+const notificationFixture = require('./notification-fixture.cjs');
 const deps = path.resolve(__dirname, '../expense-tracker-ui');
 const { chromium } = require(require.resolve('playwright', { paths: [deps] }));
 const AxeBuilder = require(require.resolve('@axe-core/playwright', { paths: [deps] })).default;
@@ -47,7 +48,8 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     const request = route.request(), url = new URL(request.url()); let data = {}, status = 200;
     const active = items.filter(s => s.isActive);
     const byCurrency = [...new Set(active.map(s => s.currency))].map(currency => ({ currency, activeCount: active.filter(s => s.currency === currency).length, monthlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost, 0), yearlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost * 12, 0) }));
-    if (url.pathname === '/api/goals') data = [];
+    if (url.pathname.startsWith('/api/account/notifications')) data = notificationFixture(url.pathname);
+    else if (url.pathname === '/api/goals') data = [];
     else if (url.pathname === '/api/auth/me') data = { username: 'dashboard-fixture', accountContext: 'A'.repeat(64) };
     else if (url.pathname === '/api/auth/logout') { status = 204; data = null; }
     else if (url.pathname === '/api/budgets') {
