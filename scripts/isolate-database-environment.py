@@ -14,7 +14,7 @@ DB = 'expensetracker_cs-db-1'
 API = 'expensetracker_cs-api-1'
 DB_KEYS = {'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD'}
 APP_PREFIXES = ('Jwt__', 'Smtp__', 'Auth__', 'ConnectionStrings__', 'Cors__', 'ForwardedHeaders__',
-                'FinanceIntegration__', 'Notifications__', 'ASPNETCORE_', 'MAILCOW_')
+                'FinanceIntegration__', 'Notifications__', 'Mfa__', 'ASPNETCORE_', 'MAILCOW_')
 
 def validate_database(model, container, image):
     service = model['services']['db']

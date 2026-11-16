@@ -86,6 +86,16 @@ def probe_api_schema(image,probe,name):
     finally:subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 
+def probe_mfa_key(image,probe,key,state,label):
+    if '\n' in key or '\r' in key:raise RuntimeError('Invalid MFA key configuration')
+    envfile=state/('mfa-key-'+label+'.env')
+    envfile.write_text('Mfa__EncryptionKey='+key+'\n');envfile.chmod(0o600)
+    command(['docker','run','--rm','--network','container:'+probe,'--memory','256m','--pids-limit','128',
+        '--read-only','--tmpfs','/tmp:rw,nosuid,nodev,mode=1777,size=32m','--env-file',str(envfile),
+        '-e','ConnectionStrings__DefaultConnection=Host=127.0.0.1;Database=postgres;Username=postgres',
+        image,'--check-mfa-key'])
+
+
 def with_security_headers(config):
     """Embed reviewed app-specific policies; shared host snippets stay unchanged."""
     spa=(ROOT/'ops/security-headers-spa.conf').read_text().strip()
@@ -143,6 +153,9 @@ def main():
     (state/'nginx.conf').write_bytes(old_nginx)
     active=json.loads(command(['docker','inspect','expensetracker_cs-api-1','expensetracker_cs-db-1'],text=True).stdout)
     api_env=dict(item.split('=',1) for item in active[0]['Config']['Env'] if '=' in item)
+    if api_env.get('Mfa__EncryptionKey'):
+        (state/'mfa-key-running.env').write_text('Mfa__EncryptionKey='+api_env['Mfa__EncryptionKey']+'\n')
+        (state/'mfa-key-running.env').chmod(0o600)
     db_env=dict(item.split('=',1) for item in active[1]['Config']['Env'] if '=' in item)
     lexer=shlex.shlex(api_env.get('ConnectionStrings__DefaultConnection',''),posix=True)
     lexer.whitespace=';';lexer.whitespace_split=True;lexer.commenters=''
@@ -195,6 +208,13 @@ def main():
             if json.loads(counts)!=json.loads(after_counts):raise RuntimeError('Migration drill changed user/subscription row counts')
             (state/'migration-drill.json').write_text(json.dumps({'before':before,'after':expected,'oldApiCompatible':True,'newApiCompatible':True,'idempotent':True}))
             print('Verified forward migrations, idempotence and old/new API compatibility on the restored database')
+        if (candidate['Config'].get('Labels') or {}).get('org.expense-tracker.mfa-backup-check')=='1':
+            desired=json.loads(command(['docker','compose','config','--format','json'],cwd=ROOT,text=True).stdout)
+            key=desired['services']['api']['environment'].get('Mfa__EncryptionKey','') or ''
+            probe_mfa_key(candidate_id,probe,key,state,'candidate')
+            if api_env.get('Mfa__EncryptionKey'):
+                probe_mfa_key(candidate_id,probe,api_env['Mfa__EncryptionKey'],state,'running')
+            print('Verified MFA encrypted records with candidate key; running key saved and checked when present')
     finally:subprocess.run(['docker','rm','-f',probe],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if any(path.is_symlink() for path in frontend.rglob('*')):raise RuntimeError('Symlinks are not allowed in public artifacts')
     revision=command(['git','-c','safe.directory='+str(ROOT),'rev-parse','--short','HEAD'],cwd=ROOT,text=True).stdout.strip()

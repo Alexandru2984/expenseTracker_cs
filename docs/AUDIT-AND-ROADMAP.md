@@ -611,3 +611,10 @@ Commituri locale sub identitatea existentă, fără atribuire AI; fără push sa
 remote. Documentarea de după lansare nu schimbă revizia de cod activă. MFA/passkeys,
 portabilitatea/ștergerea contului, alertarea externă și backupul off-site rămân
 priorități deschise, neimplementate prin această etapă.
+
+## Continuare: MFA prin autentificator
+
+Autentificarea în doi pași și recuperarea cu coduri de unică folosință sunt
+implementate; contractul, limitele, cheia de criptare, protecția la rollback și
+runbookul sunt în [AUTHENTICATOR-MFA.md](AUTHENTICATOR-MFA.md). Lansarea și
+rezultatele finale se adaugă după verificarea pe backup și pe domeniul public.
