@@ -213,6 +213,16 @@ export const notificationsApi = {
   history: () => api.get('/account/notifications/history')
 }
 
+export const accountDataApi = {
+  get: () => api.get('/account/data'),
+  export: data => api.post('/account/data/export', data, { responseType: 'blob', timeout: 60_000 }),
+  remove: async data => {
+    const response = await cookieMutation('post', '/account/data/delete', data, { identity: true, clear: true })
+    window.dispatchEvent(new Event('account:deleted'))
+    return response
+  }
+}
+
 export const mfaApi = {
   get: () => api.get('/account/mfa'),
   setup: data => api.post('/account/mfa/setup', data),

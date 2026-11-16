@@ -110,6 +110,10 @@ jobs:
         working-directory: expense-tracker-ui
         run: npm run test:mfa
 
+      - name: Account archive, deletion, session boundaries, mobile and accessibility
+        working-directory: expense-tracker-ui
+        run: npm run test:account-data
+
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest

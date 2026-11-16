@@ -162,11 +162,16 @@ async function handleLogout() {
   finally { if (epoch === authEpoch) logoutBusy.value = false }
 }
 function onAuthLogout() { resetAuthState() }
+function onAccountDeleted() {
+  resetAuthState()
+  if (['#notifications', '#security', '#data'].includes(location.hash)) history.replaceState(null, '', location.pathname + location.search)
+  showToast('Contul și datele din baza activă au fost șterse.', 'success')
+}
 function onSessionBoundary() { resetAuthState(); authReady.value = false; bootstrapAuth() }
-function onSettingsHash() { if (isAuthenticated.value && ['#notifications', '#security'].includes(window.location.hash)) showSettings.value = true }
+function onSettingsHash() { if (isAuthenticated.value && ['#notifications', '#security', '#data'].includes(window.location.hash)) showSettings.value = true }
 function onSettingsClose() {
   showSettings.value = false
-  if (['#notifications', '#security'].includes(window.location.hash)) history.replaceState(null, '', window.location.pathname + window.location.search)
+  if (['#notifications', '#security', '#data'].includes(window.location.hash)) history.replaceState(null, '', window.location.pathname + window.location.search)
   fetchAccount()
 }
 
@@ -307,11 +312,12 @@ function handleDuplicate(item) { editingItem.value = null; initialItem.value = {
 function handleCancel() { editingItem.value = null; initialItem.value = null; showForm.value = false }
 function handleNew() { if (showForm.value && !editingItem.value) handleCancel(); else { editingItem.value = null; initialItem.value = null; revealForm() } }
 
-onMounted(() => { window.addEventListener('hashchange', onSettingsHash); window.addEventListener('auth:logout', onAuthLogout); window.addEventListener('auth:boundary', onSessionBoundary); bootstrapAuth() })
+onMounted(() => { window.addEventListener('hashchange', onSettingsHash); window.addEventListener('auth:logout', onAuthLogout); window.addEventListener('account:deleted', onAccountDeleted); window.addEventListener('auth:boundary', onSessionBoundary); bootstrapAuth() })
 onUnmounted(() => {
   requestEpoch++; clearTimeout(searchTimer)
   for (const timer of toastTimers) clearTimeout(timer)
   window.removeEventListener('auth:logout', onAuthLogout)
+  window.removeEventListener('account:deleted', onAccountDeleted)
   window.removeEventListener('auth:boundary', onSessionBoundary)
   window.removeEventListener('hashchange', onSettingsHash)
 })

@@ -12,7 +12,8 @@
     "test:sessions": "node ../scripts/session-tabs-smoke.cjs",
     "test:goals": "node ../scripts/goals-smoke.cjs",
     "test:notifications": "node ../scripts/notifications-smoke.cjs",
-    "test:mfa": "node ../scripts/mfa-smoke.cjs"
+    "test:mfa": "node ../scripts/mfa-smoke.cjs",
+    "test:account-data": "node ../scripts/account-data-smoke.cjs"
   },
   "dependencies": {
     "axios": "^1.7.0",

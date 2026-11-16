@@ -4,6 +4,7 @@ import FinanceIntegrationPanel from './FinanceIntegrationPanel.vue'
 import SessionPanel from './SessionPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
 import MfaPanel from './MfaPanel.vue'
+import AccountDataPanel from './AccountDataPanel.vue'
 import { useDialog } from '../useDialog.js'
 import { useCooldown } from '../useCooldown.js'
 import { accountApi, authApi } from '../api.js'
@@ -213,6 +214,8 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
           <NotificationPanel :email="account.email ?? ''" :verified="account.emailVerified" @toast="(...args) => emit('toast', ...args)" />
           <FinanceIntegrationPanel @toast="(...args) => emit('toast', ...args)" />
           <SessionPanel :key="sessionRevision" @toast="(...args) => emit('toast', ...args)" @logout="emit('logout')" />
+
+          <AccountDataPanel @toast="(...args) => emit('toast', ...args)" />
 
           <!-- Logout everywhere -->
           <div class="pt-2 border-t border-gray-100 dark:border-gray-800">

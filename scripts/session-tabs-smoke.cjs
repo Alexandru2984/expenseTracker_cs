@@ -124,11 +124,20 @@ const server = http.createServer(async (request, response) => {
   }
   // Even with all cross-tab mechanisms unavailable, the server binding refuses
   // wrong-account mutations, logout, refresh and blob downloads without replay.
-  for (const action of ["goalsApi.create({name:'stale'})", "subscriptionsApi.create({name:'stale'})", 'authApi.logout()', 'subscriptionsApi.exportCsv()']) {
+  for (const action of ["goalsApi.create({name:'stale'})", "subscriptionsApi.create({name:'stale'})", 'authApi.logout()', 'subscriptionsApi.exportCsv()', "accountDataApi.export({currentPassword:'stale'})"]) {
    state = fixture(); const ctx = await context('isolated'), reader = await harness(ctx), writer = await harness(ctx);
    assert.equal(await run(writer, "window.client.authApi.login({username:'B',password:'synthetic-password'})"), 'ok');
    assert.equal(await run(reader, 'window.client.' + action), 'ERR_CANCELED');
    assert.equal(state.actor, 'B'); assert.equal(state.blocked, 1); assert.equal(state.writes.length, 0); checks += 5;
+   await ctx.close();
+  }
+  // Account deletion checks the active actor before submitting the destructive POST.
+  state = fixture();
+  {
+   const ctx = await context('isolated'), reader = await harness(ctx), writer = await harness(ctx);
+   assert.equal(await run(writer, "window.client.authApi.login({username:'B',password:'synthetic-password'})"), 'ok');
+   assert.equal(await run(reader, "window.client.accountDataApi.remove({currentPassword:'stale',confirmationUsername:'stale'})"), 'ERR_CANCELED');
+   assert.equal(state.actor, 'B'); assert.equal(state.blocked, 0); assert.equal(state.writes.length, 0); checks += 5;
    await ctx.close();
   }
   // Login waits for an in-flight refresh cookie write, then becomes final actor.
