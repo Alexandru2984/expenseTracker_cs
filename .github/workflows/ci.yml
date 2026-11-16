@@ -114,6 +114,17 @@ jobs:
         working-directory: expense-tracker-ui
         run: npm run test:account-data
 
+      - name: Upload isolated browser diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/ci/
+            .artifacts/screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
+
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
