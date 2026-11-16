@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import tempfile
 import time
+import uuid
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -96,6 +97,61 @@ def probe_mfa_key(image,probe,key,state,label):
         image,'--check-mfa-key'])
 
 
+def validate_deletion_receipts(records):
+    if not isinstance(records,list) or len(records)>100000:raise RuntimeError('Invalid deletion ledger size')
+    result={}
+    for record in records:
+        if not isinstance(record,dict) or set(record)!={'userId','deletedAt'}:raise RuntimeError('Invalid deletion receipt')
+        try:
+            user_id=str(uuid.UUID(record['userId']))
+            deleted=datetime.fromisoformat(record['deletedAt'].replace('Z','+00:00'))
+            if deleted.utcoffset()!=timezone.utc.utcoffset(deleted):raise ValueError('Expected UTC')
+        except (ValueError,TypeError,AttributeError):raise RuntimeError('Invalid deletion receipt fields') from None
+        if user_id in result:raise RuntimeError('Duplicate deletion receipt')
+        result[user_id]={'userId':user_id,'deletedAt':deleted.isoformat()}
+    return [result[key] for key in sorted(result)]
+
+
+def preserve_deletion_receipts(directory,records):
+    """Keep a private union outside database dumps. Never silently discard older receipts."""
+    path=directory/'account-deletion-ledger.json'
+    if path.is_symlink():raise RuntimeError('Deletion ledger must not be a symlink')
+    previous=validate_deletion_receipts(json.loads(path.read_text())) if path.exists() else []
+    merged={record['userId']:record for record in previous}
+    for record in validate_deletion_receipts(records):
+        prior=merged.get(record['userId'])
+        if prior and prior['deletedAt']!=record['deletedAt']:raise RuntimeError('Deletion receipt changed; reconcile privately')
+        merged[record['userId']]=record
+    result=validate_deletion_receipts(list(merged.values()))
+    with tempfile.NamedTemporaryFile(dir=directory,prefix='.deletion-ledger-',delete=False) as temporary:
+        name=Path(temporary.name)
+        try:
+            temporary.write((json.dumps(result,indent=2)+'\n').encode());temporary.flush();os.fsync(temporary.fileno());os.fchmod(temporary.fileno(),0o600)
+            os.replace(name,path)
+        finally:name.unlink(missing_ok=True)
+    return result
+
+
+def collect_deletion_receipts(container,user,database):
+    base=['docker','exec',container,'psql','-h','/var/run/postgresql','-U',user,'-d',database,'-At','-v','ON_ERROR_STOP=1','-c']
+    exists=command(base+["SELECT to_regclass('public.\"AccountDeletionRecords\"') IS NOT NULL"],text=True).stdout.strip()
+    if exists=='f':return [] # Before the feature's first forward migration.
+    if exists!='t':raise RuntimeError('Could not inspect deletion receipts')
+    sql='SELECT COALESCE(json_agg(json_build_object(\'userId\',"UserId",\'deletedAt\',"DeletedAt") ORDER BY "UserId"),\'[]\'::json) FROM "AccountDeletionRecords"'
+    return validate_deletion_receipts(json.loads(command(base+[sql],text=True).stdout))
+
+
+def verify_deletion_receipts(container,user,database,records):
+    """Read-only guard for an isolated restore, or live state before deployment."""
+    records=validate_deletion_receipts(records)
+    for offset in range(0,len(records),1000):
+        # UUID validation above makes these literals independent of input SQL syntax.
+        ids=','.join("'"+record['userId']+"'::uuid" for record in records[offset:offset+1000])
+        sql='SELECT COUNT(*) FROM "Users" WHERE "Id" IN ('+ids+')'
+        count=int(command(['docker','exec',container,'psql','-h','/var/run/postgresql','-U',user,'-d',database,'-At','-v','ON_ERROR_STOP=1','-c',sql],text=True).stdout.strip())
+        if count:raise RuntimeError('Restored/live database contains deleted accounts; reconcile in isolation before reopening access')
+
+
 def with_security_headers(config):
     """Embed reviewed app-specific policies; shared host snippets stay unchanged."""
     spa=(ROOT/'ops/security-headers-spa.conf').read_text().strip()
@@ -122,10 +178,21 @@ def with_security_headers(config):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--image',required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('--image')
+    parser.add_argument('--check-deletions-container',help='Read-only check of an isolated restored container against the preserved deletion ledger')
+    parser.add_argument('--database-user',default='postgres')
+    parser.add_argument('--database',default='postgres')
     parser.add_argument('--migrate',action='store_true',help='Apply reviewed forward migrations, after an isolated restore and compatibility drill')
     args=parser.parse_args()
     if os.geteuid()!=0:raise SystemExit('Run with sudo')
+    if args.check_deletions_container:
+        if args.image or args.migrate:raise SystemExit('Choose deletion check or deployment')
+        path=Path('/var/backups/expense-tracker/account-deletion-ledger.json')
+        if path.is_symlink() or not path.is_file():raise SystemExit('A preserved deletion ledger is required')
+        verify_deletion_receipts(args.check_deletions_container,args.database_user,args.database,json.loads(path.read_text()))
+        print('Deletion ledger check passed; no matching deleted accounts present')
+        return
+    if not args.image:parser.error('--image is required for deployment')
     lockdir=Path('/var/backups/expense-tracker');lockdir.mkdir(parents=True,exist_ok=True,mode=0o700)
     lock=lockdir.joinpath('.deploy.lock').open('a');os.fchmod(lock.fileno(),0o600)
     try:fcntl.flock(lock.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -181,6 +248,10 @@ def main():
     archive.chmod(0o600)
     with archive.open('rb') as saved:
         command(['docker','exec','-i','expensetracker_cs-db-1','pg_restore','--list'],stdin=saved)
+    # Copy receipts after the dump; a deletion concurrent with pg_dump must not be forgotten.
+    receipts=preserve_deletion_receipts(state.parent,collect_deletion_receipts('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB']))
+    (state/'deletion-receipts.json').write_text(json.dumps(receipts,indent=2)+'\n');(state/'deletion-receipts.json').chmod(0o600)
+    verify_deletion_receipts('expensetracker_cs-db-1',db_env['POSTGRES_USER'],db_env['POSTGRES_DB'],receipts)
     # Full restore drill in a separate, non-networked, ephemeral database container.
     pgimage=command(['docker','inspect','--format','{{.Image}}','expensetracker_cs-db-1'],text=True).stdout.strip()
     probe='expense-restore-probe-'+stamp.lower()
@@ -194,6 +265,8 @@ def main():
         else:raise RuntimeError('Restore probe was not ready')
         with archive.open('rb') as saved:
             command(['docker','exec','-i',probe,'pg_restore','--exit-on-error','--no-owner','--no-privileges','-h','127.0.0.1','-U','postgres','-d','postgres'],stdin=saved)
+        verify_deletion_receipts(probe,'postgres','postgres',receipts)
+        print('Verified preserved deletion ledger against live state and isolated restore')
         counts=command(['docker','exec',probe,'psql','-h','127.0.0.1','-U','postgres','-d','postgres','-At','-c','SELECT json_build_object(\'users\',(SELECT COUNT(*) FROM "Users"),\'subscriptions\',(SELECT COUNT(*) FROM "Subscriptions"))'],text=True).stdout.strip()
         json.loads(counts)
         print('Verified PostgreSQL backup restored in isolation; table counts:',counts)

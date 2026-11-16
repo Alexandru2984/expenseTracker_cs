@@ -629,3 +629,12 @@ Detaliile și limitele sunt în documentul MFA; alertarea automată și passkeys
 rămân deschise. Următoarea etapă de produs poate aborda portabilitatea datelor și
 ștergerea contului, cu revocarea tokenurilor Finance și o politică explicită pentru
 backupuri; urmează apoi alertele de securitate și extinderea conectorului F#.
+
+## Continuare: arhiva privată și ștergerea contului
+
+Implementate exportul JSON cu reautentificare/snapshot consistent, ștergerea
+tranzacțională cu confirmare/MFA și verificarea restaurărilor față de evidența
+ștergerilor. Contractul și limitele reale sunt în
+[ACCOUNT-DATA-AND-DELETION.md](ACCOUNT-DATA-AND-DELETION.md). Activarea se
+consemnează după probe; nu se declară eliminarea automată a copiilor din F#,
+backupuri, loguri sau dispozitivele utilizatorului.
