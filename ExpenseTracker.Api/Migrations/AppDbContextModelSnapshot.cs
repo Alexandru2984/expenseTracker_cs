@@ -102,6 +102,134 @@ namespace ExpenseTracker.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Models.NotificationOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("LocalDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PreferenceVersion")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RecipientHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("State", "LeaseExpiresAtUtc");
+
+                    b.HasIndex("State", "NextAttemptAtUtc");
+
+                    b.HasIndex("UserId", "LocalDate")
+                        .IsUnique();
+
+                    b.ToTable("NotificationOutbox", t =>
+                        {
+                            t.HasCheckConstraint("CK_NotificationOutbox_Attempts", "\"Attempts\" BETWEEN 0 AND 3");
+                        });
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.NotificationPreference", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ConsentRecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("GoalDeadlines")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IncludeNames")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LeadDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("NextDigestAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Renewals")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SendHour")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("Trials")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("Enabled", "NextDigestAtUtc");
+
+                    b.ToTable("NotificationPreferences", t =>
+                        {
+                            t.HasCheckConstraint("CK_NotificationPreferences_Ranges", "\"SendHour\" BETWEEN 0 AND 23 AND \"LeadDays\" BETWEEN 0 AND 14");
+                        });
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Models.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -441,6 +569,28 @@ namespace ExpenseTracker.Api.Migrations
                     b.HasOne("ExpenseTracker.Api.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.NotificationOutbox", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.NotificationPreference", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.User", "User")
+                        .WithOne()
+                        .HasForeignKey("ExpenseTracker.Api.Models.NotificationPreference", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

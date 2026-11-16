@@ -18,6 +18,8 @@ public class AppDbContext : DbContext
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
     public DbSet<GoalContribution> GoalContributions => Set<GoalContribution>();
     public DbSet<SubscriptionPriceChange> SubscriptionPriceChanges => Set<SubscriptionPriceChange>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+    public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
 
     public Task<User?> FindUserByUsernameAsync(string username)
     {
@@ -71,6 +73,8 @@ public class AppDbContext : DbContext
                 entry.Entity.Version = Guid.NewGuid();
             }
         }
+        foreach (var entry in ChangeTracker.Entries<NotificationOutbox>())
+            if (entry.State is EntityState.Added or EntityState.Modified) entry.Entity.Version = Guid.NewGuid();
         return SaveWithHistoryAsync(changes, cancellationToken);
     }
 
@@ -88,6 +92,32 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<NotificationPreference>(entity =>
+        {
+            entity.HasKey(e => e.UserId);
+            entity.Property(e => e.TimeZone).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.Enabled, e.NextDigestAtUtc });
+            entity.HasOne(e => e.User).WithOne().HasForeignKey<NotificationPreference>(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(table => table.HasCheckConstraint("CK_NotificationPreferences_Ranges",
+                "\"SendHour\" BETWEEN 0 AND 23 AND \"LeadDays\" BETWEEN 0 AND 14"));
+        });
+        modelBuilder.Entity<NotificationOutbox>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TimeZone).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.RecipientHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.State).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.ErrorCode).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.UserId, e.LocalDate }).IsUnique();
+            entity.HasIndex(e => new { e.State, e.NextAttemptAtUtc });
+            entity.HasIndex(e => new { e.State, e.LeaseExpiresAtUtc });
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(table => table.HasCheckConstraint("CK_NotificationOutbox_Attempts", "\"Attempts\" BETWEEN 0 AND 3"));
+        });
 
         modelBuilder.Entity<SavingsGoal>(entity =>
         {

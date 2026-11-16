@@ -170,6 +170,7 @@ public class AccountController : ControllerBase
         }
         user.Email = user.PendingEmail;
         user.EmailVerified = true;
+        await NotificationContent.DisableForEmailChange(_db, user.Id);
         await _verification.InvalidateAllAsync(user.Id);
         await RevokeAllSessionsAsync(user.Id);
         try

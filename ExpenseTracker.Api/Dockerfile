@@ -29,7 +29,8 @@ ARG VCS_REF=unknown
 LABEL org.opencontainers.image.revision=$VCS_REF
 WORKDIR /app
 
-RUN addgroup -g 101 -S appgroup && adduser -u 100 -S appuser -G appgroup
+RUN apk add --no-cache tzdata \
+    && addgroup -g 101 -S appgroup && adduser -u 100 -S appuser -G appgroup
 USER appuser
 
 COPY --from=build --chown=appuser:appgroup /app/publish .

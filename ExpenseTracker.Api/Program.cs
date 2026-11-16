@@ -74,11 +74,18 @@ try
     builder.Services.AddSingleton<AuthTokenService>();
     builder.Services.AddScoped<EmailService>();
     builder.Services.AddScoped<VerificationService>();
+    builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+    builder.Services.AddSingleton<IReminderEmailSender, ReminderEmailSender>();
+    builder.Services.AddScoped<NotificationContent>();
+    builder.Services.AddScoped<NotificationEngine>();
 
     // Background housekeeping (skipped under the in-memory test provider, which
     // doesn't support the bulk ExecuteDelete used by the cleanup).
     if (!builder.Environment.IsEnvironment("Testing"))
+    {
         builder.Services.AddHostedService<TokenCleanupService>();
+        builder.Services.AddHostedService<NotificationWorker>();
+    }
 
     builder.Services.AddControllers()
         .AddJsonOptions(options =>
