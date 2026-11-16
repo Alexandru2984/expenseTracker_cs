@@ -122,6 +122,8 @@ jobs:
           path: |
             .artifacts/ci/
             .artifacts/screenshots/
+          # Only the two synthetic browser-output directories above are included.
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
 
