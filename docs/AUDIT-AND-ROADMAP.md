@@ -440,3 +440,35 @@ Următoarea etapă de produs: obiective de economisire persistente, apoi notific
 opt-in cu outbox și fus orar. MFA/passkeys, backup off-site și alertare externă
 rămân priorități deschise, alături de portabilitatea/ștergerea contului. Acestea
 necesită implementare și validare separate; nu sunt declarate livrate.
+
+## Lansare coordonare sesiuni — 16 noiembrie
+
+Cod activ: `c1452421f41410de9bf3b6de89cc979379d868be`; UI și eticheta imaginii API
+corespund acestei revizii. Commituri implementare: `70adcb1` (server), `c145242`
+(browser și regresii). Backup/rollback privat:
+`/var/backups/expense-tracker/deploy-20261116T000736Z`.
+
+Backupul a fost restaurat izolat, cu 0 conturi și 0 abonamente la snapshot.
+Nu au fost migrații noi: baza activă are aceleași 12 migrații. ID-ul și StartedAt
+ale containerului PostgreSQL sunt identice cu captura dinaintea lansării.
+API healthy, zero restarturi; imaginea fixată de Compose implicit corespunde
+imaginii active, iar mediul DB corespunde configurației rezolvate. Dry-run-ul
+pentru API raportează Running, fără recreare. Compose afișează avertismente despre
+etichetele volumelor existente; nu s-au recreat sau reetichetat volumele.
+Snapshotul nginx din ops reflectă release-ul activ.
+
+Buildul final a trecut: 189 teste backend pe PostgreSQL fără skip; 444 execuții
+dashboard la 1440/390/320 px, light/dark; 53 aserțiuni între taburi; 24 Finance;
+4 teste de pin/deployment. Auditul npm al dependențelor de producție raportează
+zero vulnerabilități cunoscute. Nu s-a făcut push sau rulat CI remote.
+
+Verificări HTTPS publice: revizia UI corespunde; health 200; șase rute private
+401/no-store și un singur X-Frame-Options DENY; nonce CSP distinct între două
+răspunsuri HTML. Chromium la 390 px: login vizibil, fără overflow, erori JS sau
+încălcări CSP. F# HttpClient: snapshot Finance, istoricul Finance și istoricul
+web refuză accesul anonim cu 401/no-store. Nu s-au creat conturi sau trimis
+emailuri în producție. Proba inițială urllib cu User-Agent implicit a fost
+refuzată de Cloudflare cu 1010; verificările curl, Chromium și F# au trecut,
+iar regulile Cloudflare nu au fost modificate.
+
+Documentarea ulterioară lansării nu schimbă revizia de cod activă.
