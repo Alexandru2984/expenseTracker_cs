@@ -33,7 +33,7 @@ public class VerificationService
             .Where(c => c.UserId == userId && c.ConsumedAt == null).ToListAsync();
         foreach (var entry in codes) entry.ConsumedAt = DateTime.UtcNow;
         var user = await _db.Users.FindAsync(userId);
-        if (user is not null) user.PendingEmail = null;
+        if (user is not null) { user.PendingEmail = null; MfaService.ClearSetup(user); }
     }
 
     public const int EmailCooldownSeconds = 60;

@@ -82,7 +82,8 @@ public class AuthTokenService
     // Bind JWTs to current credentials without putting password hashes in tokens.
     public string CredentialStamp(User user) => Convert.ToBase64String(HMACSHA256.HashData(
         Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!),
-        Encoding.UTF8.GetBytes($"{user.PasswordHash}\n{user.Email}\n{user.EmailVerified}")));
+        Encoding.UTF8.GetBytes($"{user.PasswordHash}\n{user.Email}\n{user.EmailVerified}"
+            + (user.MfaEpoch == Guid.Empty ? "" : $"\nmfa:v1:{user.MfaEpoch:N}"))));
 
     // Numeric codes have only a million possibilities. A server-keyed MAC keeps
     // a database-only disclosure from enabling an offline dictionary attack.

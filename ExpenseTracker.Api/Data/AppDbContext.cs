@@ -20,6 +20,8 @@ public class AppDbContext : DbContext
     public DbSet<SubscriptionPriceChange> SubscriptionPriceChanges => Set<SubscriptionPriceChange>();
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
+    public DbSet<MfaRecoveryCode> MfaRecoveryCodes => Set<MfaRecoveryCode>();
+    public DbSet<MfaLoginChallenge> MfaLoginChallenges => Set<MfaLoginChallenge>();
 
     public Task<User?> FindUserByUsernameAsync(string username)
     {
@@ -92,6 +94,26 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<MfaRecoveryCode>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CodeHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ConsumedAt).IsConcurrencyToken();
+            entity.HasIndex(e => new { e.UserId, e.CodeHash }).IsUnique();
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<MfaLoginChallenge>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TokenHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.CredentialStamp).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Attempts).IsConcurrencyToken();
+            entity.Property(e => e.ConsumedAt).IsConcurrencyToken();
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => new { e.UserId, e.ExpiresAt });
+            entity.ToTable(table=>table.HasCheckConstraint("CK_MfaLoginChallenges_Attempts","\"Attempts\" BETWEEN 0 AND 5"));
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<NotificationPreference>(entity =>
         {
@@ -215,6 +237,17 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<User>(entity =>
         {
+            // Old binaries cannot accept a password-only reset/login for MFA accounts.
+            entity.ToTable(table => table.HasCheckConstraint("CK_Users_MfaPasswordMarker",
+                "\"MfaEnabled\" = (left(\"PasswordHash\", 5) = '$mfa$')"));
+            entity.ToTable(table => table.HasCheckConstraint("CK_Users_MfaVerifiedEmail","NOT \"MfaEnabled\" OR \"EmailVerified\""));
+            entity.ToTable(table => table.HasCheckConstraint("CK_Users_MfaSetupAttempts","\"MfaSetupAttempts\" BETWEEN 0 AND 5"));
+            entity.Property(e => e.MfaEnabled).IsConcurrencyToken().HasDefaultValue(false);
+            entity.Property(e => e.MfaEpoch).IsConcurrencyToken().HasDefaultValue(Guid.Empty);
+            entity.Property(e => e.MfaSecret).HasMaxLength(1024);
+            entity.Property(e => e.MfaPendingSecret).HasMaxLength(1024);
+            entity.Property(e => e.MfaSetupId).IsConcurrencyToken();
+            entity.Property(e => e.MfaLastStep).IsConcurrencyToken();
             entity.HasKey(e => e.Id);
 
             entity.Property(e => e.Username)

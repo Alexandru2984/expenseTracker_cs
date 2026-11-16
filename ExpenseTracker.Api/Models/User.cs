@@ -21,6 +21,15 @@ public class User
     public DateTime? LoginBlockedUntil { get; set; }
 
     public string PasswordHash { get; set; } = string.Empty;
+    public bool MfaEnabled { get; set; }
+    public Guid MfaEpoch { get; set; }
+    public string? MfaSecret { get; set; }
+    public long? MfaLastStep { get; set; }
+    public Guid? MfaSetupId { get; set; }
+    public string? MfaPendingSecret { get; set; }
+    public DateTime? MfaPendingExpiresAt { get; set; }
+    public DateTime? MfaSetupStartedAt { get; set; }
+    public int MfaSetupAttempts { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

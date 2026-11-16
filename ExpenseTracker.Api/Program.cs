@@ -22,6 +22,8 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+    if(args.Length==1&&args[0]=="--check-mfa-key")
+        return await MfaBackupProbe.Run(new ConfigurationBuilder().AddEnvironmentVariables().Build());
     var builder = WebApplication.CreateBuilder(args);
     builder.WebHost.ConfigureKestrel(options =>
     {
@@ -78,6 +80,8 @@ try
     builder.Services.AddSingleton<IReminderEmailSender, ReminderEmailSender>();
     builder.Services.AddScoped<NotificationContent>();
     builder.Services.AddScoped<NotificationEngine>();
+    builder.Services.AddSingleton<MfaSecrets>();
+    builder.Services.AddScoped<MfaService>();
 
     // Background housekeeping (skipped under the in-memory test provider, which
     // doesn't support the bulk ExecuteDelete used by the cleanup).

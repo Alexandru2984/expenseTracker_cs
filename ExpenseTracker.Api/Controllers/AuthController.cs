@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -22,15 +23,17 @@ public class AuthController : ControllerBase
     private readonly VerificationService _verification;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
+    private readonly MfaService _mfa;
     private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N"));
 
-    public AuthController(AppDbContext db, AuthTokenService tokens, VerificationService verification, IConfiguration config, ILogger<AuthController> logger)
+    public AuthController(AppDbContext db, AuthTokenService tokens, VerificationService verification, IConfiguration config, ILogger<AuthController> logger, MfaService mfa)
     {
         _db = db;
         _tokens = tokens;
         _verification = verification;
         _config = config;
         _logger = logger;
+        _mfa = mfa;
     }
 
     // POST /api/auth/register — creates an UNVERIFIED account and emails a code.
@@ -127,11 +130,9 @@ public class AuthController : ControllerBase
             return Unauthorized(LoginFailed());
         }
 
-        LoginProtection.Reset(user);
-        await _db.SaveChangesAsync();
-
         if (!user.EmailVerified)
         {
+            LoginProtection.Reset(user);await _db.SaveChangesAsync();
             if (transaction is not null) await transaction.CommitAsync();
             var pd = new ProblemDetails
             {
@@ -144,10 +145,74 @@ public class AuthController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, pd);
         }
 
+        if (user.MfaEnabled)
+        {
+            var challenge=await _mfa.Challenge(user,Request.HttpContext.RequestAborted);
+            if(transaction is not null)await transaction.CommitAsync();
+            if(challenge is null)
+            {
+                Response.Headers.RetryAfter="60";
+                return StatusCode(429,new ProblemDetails {Title="Ai deja verificări MFA în așteptare. Folosește una existentă sau reîncearcă mai târziu."});
+            }
+            return Accepted(challenge);
+        }
+        LoginProtection.Reset(user);
+        await _db.SaveChangesAsync();
         var session = await CreateSessionAsync(user);
         if (transaction is not null) await transaction.CommitAsync();
         WriteSession(session);
         return Ok(new UserResponseDto { Username = user.Username, AccountContext = _tokens.AccountContext(user.Id) });
+    }
+
+    [HttpPost("mfa-login"),AllowAnonymous]
+    public async Task<IActionResult> MfaLogin(MfaLoginDto request,CancellationToken ct)
+    {
+        var hash=MfaService.ChallengeHash(request.ChallengeToken);
+        var challenge=await _db.MfaLoginChallenges.Include(c=>c.User).SingleOrDefaultAsync(c=>c.TokenHash==hash,ct);
+        if(challenge is null)return Unauthorized(MfaRestart());
+        await using var transaction=_db.Database.IsRelational()?await _db.Database.BeginTransactionAsync(ct):null;
+        try {await _verification.LockAccountAsync(challenge.User);}
+        catch(DbUpdateConcurrencyException){return Unauthorized(LoginFailed());}
+        if(_db.Database.IsRelational())await _db.Entry(challenge).ReloadAsync(ct);
+        var user=challenge.User;var now=_mfa.Now;
+        if(challenge.ConsumedAt is not null||challenge.ExpiresAt<=now||challenge.Attempts>=5||!user.MfaEnabled
+            ||!user.EmailVerified||challenge.CredentialStamp!=_tokens.CredentialStamp(user)||LoginProtection.IsBlocked(user,now))
+            return Unauthorized(MfaRestart());
+        bool valid;
+        try{valid=await _mfa.Proof(user,request.Code,ct);}
+        catch(Exception ex)when(ex is CryptographicException or FormatException)
+        {return StatusCode(503,new ProblemDetails {Title="MFA este temporar indisponibilă. Poți folosi un cod de rezervă."});}
+        if(!valid)
+        {
+            challenge.Attempts++;if(challenge.Attempts>=5)challenge.ConsumedAt=now;
+            LoginProtection.Fail(user,now);await _db.SaveChangesAsync(ct);
+            if(transaction is not null)await transaction.CommitAsync(ct);
+            if(challenge.Attempts>=5)return Unauthorized(MfaRestart());
+            return Unauthorized(new ProblemDetails {Title="Cod MFA incorect, expirat sau deja folosit. Încearcă un cod nou ori un cod de rezervă."});
+        }
+        challenge.ConsumedAt=now;LoginProtection.Reset(user);
+        var session=await CreateSessionAsync(user);
+        if(transaction is not null)await transaction.CommitAsync(ct);
+        WriteSession(session);
+        return Ok(new UserResponseDto {Username=user.Username,AccountContext=_tokens.AccountContext(user.Id)});
+    }
+
+    private static ProblemDetails MfaRestart()=>new(){Title="Verificarea MFA a expirat sau nu mai este valabilă. Reîncepe conectarea.",
+        Extensions={{"code","mfa_restart_required"}}};
+
+    [HttpPost("mfa-cancel"),AllowAnonymous]
+    public async Task<IActionResult> MfaCancel(MfaLoginDto request,CancellationToken ct)
+    {
+        var hash=MfaService.ChallengeHash(request.ChallengeToken);
+        var challenge=await _db.MfaLoginChallenges.Include(c=>c.User).SingleOrDefaultAsync(c=>c.TokenHash==hash,ct);
+        if(challenge is null)return NoContent();
+        await using var transaction=_db.Database.IsRelational()?await _db.Database.BeginTransactionAsync(ct):null;
+        try{await _verification.LockAccountAsync(challenge.User);}
+        catch(DbUpdateConcurrencyException){return NoContent();}
+        if(_db.Database.IsRelational())await _db.Entry(challenge).ReloadAsync(ct);
+        challenge.ConsumedAt??=_mfa.Now;await _db.SaveChangesAsync(ct);
+        if(transaction is not null)await transaction.CommitAsync(ct);
+        return NoContent();
     }
 
     // POST /api/auth/verify-email — confirms the code and auto-logs the user in.
@@ -157,7 +222,7 @@ public class AuthController : ControllerBase
         var user = await _db.FindUserByUsernameAsync(dto.Username);
         // Verification is a one-time proof, never a passwordless login route for
         // an account that was already verified (including after password reset).
-        if (user is null || user.EmailVerified)
+        if (user is null || user.EmailVerified || user.MfaEnabled)
             return BadRequest(InvalidCode());
 
         if (!await _verification.ConsumeAsync(user, VerificationPurpose.EmailVerification, dto.Code))
@@ -218,7 +283,7 @@ public class AuthController : ControllerBase
             return BadRequest(InvalidCode());
         }
 
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        user.PasswordHash = PasswordRules.Hash(dto.NewPassword, user.MfaEnabled);
         LoginProtection.Reset(user);
         user.EmailVerified = true; // proving control of the inbox also verifies it
         await _verification.InvalidateAllAsync(user.Id);

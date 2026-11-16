@@ -62,6 +62,10 @@ public class TokenCleanupService : BackgroundService
         var codes = await db.VerificationCodes
             .Where(c => c.ExpiresAt < now || (c.ConsumedAt != null && c.ConsumedAt < cutoff))
             .ExecuteDeleteAsync(ct);
+        await db.MfaLoginChallenges.Where(c=>c.ExpiresAt<now||(c.ConsumedAt!=null&&c.ConsumedAt<cutoff)).ExecuteDeleteAsync(ct);
+        await db.Users.Where(u=>u.MfaPendingExpiresAt<now).ExecuteUpdateAsync(set=>set
+            .SetProperty(u=>u.MfaPendingSecret,(string?)null).SetProperty(u=>u.MfaSetupId,(Guid?)null)
+            .SetProperty(u=>u.MfaPendingExpiresAt,(DateTime?)null).SetProperty(u=>u.MfaSetupAttempts,0),ct);
 
         if (tokens > 0 || codes > 0)
             _logger.LogInformation(

@@ -54,6 +54,75 @@ namespace ExpenseTracker.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ExpenseTracker.Api.Models.MfaLoginChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CredentialStamp")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "ExpiresAt");
+
+                    b.ToTable("MfaLoginChallenges", t =>
+                        {
+                            t.HasCheckConstraint("CK_MfaLoginChallenges_Attempts", "\"Attempts\" BETWEEN 0 AND 5");
+                        });
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.MfaRecoveryCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CodeHash")
+                        .IsUnique();
+
+                    b.ToTable("MfaRecoveryCodes");
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Models.MonthlyBudget", b =>
                 {
                     b.Property<Guid>("Id")
@@ -483,6 +552,43 @@ namespace ExpenseTracker.Api.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<bool>("MfaEnabled")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("MfaEpoch")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValue(new Guid("00000000-0000-0000-0000-000000000000"));
+
+                    b.Property<long?>("MfaLastStep")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("MfaPendingExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MfaPendingSecret")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("MfaSecret")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("MfaSetupAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("MfaSetupId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("MfaSetupStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PasswordHash")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -510,7 +616,14 @@ namespace ExpenseTracker.Api.Migrations
                     b.HasIndex("Username")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", t =>
+                        {
+                            t.HasCheckConstraint("CK_Users_MfaPasswordMarker", "\"MfaEnabled\" = (left(\"PasswordHash\", 5) = '$mfa$')");
+
+                            t.HasCheckConstraint("CK_Users_MfaSetupAttempts", "\"MfaSetupAttempts\" BETWEEN 0 AND 5");
+
+                            t.HasCheckConstraint("CK_Users_MfaVerifiedEmail", "NOT \"MfaEnabled\" OR \"EmailVerified\"");
+                        });
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Models.VerificationCode", b =>
@@ -562,6 +675,28 @@ namespace ExpenseTracker.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Goal");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.MfaLoginChallenge", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpenseTracker.Api.Models.MfaRecoveryCode", b =>
+                {
+                    b.HasOne("ExpenseTracker.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ExpenseTracker.Api.Models.MonthlyBudget", b =>

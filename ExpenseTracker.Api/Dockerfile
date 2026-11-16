@@ -27,6 +27,7 @@ RUN dotnet ef migrations bundle \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 ARG VCS_REF=unknown
 LABEL org.opencontainers.image.revision=$VCS_REF
+LABEL org.expense-tracker.mfa-backup-check="1"
 WORKDIR /app
 
 RUN apk add --no-cache tzdata \
