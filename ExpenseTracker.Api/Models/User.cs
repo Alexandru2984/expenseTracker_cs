@@ -31,5 +31,7 @@ public class User
     public DateTime? MfaSetupStartedAt { get; set; }
     public int MfaSetupAttempts { get; set; }
 
+    public DateTime? DataExportRequestedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

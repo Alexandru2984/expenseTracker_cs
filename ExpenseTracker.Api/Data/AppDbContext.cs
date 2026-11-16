@@ -9,6 +9,8 @@ public class AppDbContext : DbContext
 
     public DbSet<SubscriptionItem> Subscriptions => Set<SubscriptionItem>();
 
+    public DbSet<AccountDeletionRecord> AccountDeletionRecords => Set<AccountDeletionRecord>();
+
     public DbSet<User> Users => Set<User>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -235,6 +237,12 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.UserId, e.ImportSourceId }).IsUnique();
         });
 
+        modelBuilder.Entity<AccountDeletionRecord>(entity =>
+        {
+            entity.HasKey(e => e.UserId);
+            entity.HasIndex(e => e.DeletedAt);
+        });
+
         modelBuilder.Entity<User>(entity =>
         {
             // Old binaries cannot accept a password-only reset/login for MFA accounts.
@@ -242,6 +250,7 @@ public class AppDbContext : DbContext
                 "\"MfaEnabled\" = (left(\"PasswordHash\", 5) = '$mfa$')"));
             entity.ToTable(table => table.HasCheckConstraint("CK_Users_MfaVerifiedEmail","NOT \"MfaEnabled\" OR \"EmailVerified\""));
             entity.ToTable(table => table.HasCheckConstraint("CK_Users_MfaSetupAttempts","\"MfaSetupAttempts\" BETWEEN 0 AND 5"));
+            entity.Property(e => e.DataExportRequestedAt).IsConcurrencyToken();
             entity.Property(e => e.MfaEnabled).IsConcurrencyToken().HasDefaultValue(false);
             entity.Property(e => e.MfaEpoch).IsConcurrencyToken().HasDefaultValue(Guid.Empty);
             entity.Property(e => e.MfaSecret).HasMaxLength(1024);

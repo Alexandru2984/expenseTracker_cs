@@ -48,7 +48,8 @@ public class VerificationService
         if (!_db.Database.IsRelational()) return;
         if (_db.Database.CurrentTransaction is null) throw new InvalidOperationException("Account lock requires a transaction.");
         var fresh = (await _db.Users.FromSqlInterpolated($"SELECT * FROM \"Users\" WHERE \"Id\" = {user.Id} FOR UPDATE")
-            .AsNoTracking().ToListAsync()).Single();
+            .AsNoTracking().ToListAsync()).SingleOrDefault()
+            ?? throw new DbUpdateConcurrencyException("Account no longer exists.");
         if (_tokens.CredentialStamp(user) != _tokens.CredentialStamp(fresh))
             throw new DbUpdateConcurrencyException("Credentials changed during the request.");
         _db.Entry(user).CurrentValues.SetValues(fresh);

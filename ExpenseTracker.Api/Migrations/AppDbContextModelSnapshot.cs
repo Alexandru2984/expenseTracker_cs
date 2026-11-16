@@ -22,6 +22,22 @@ namespace ExpenseTracker.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ExpenseTracker.Api.Models.AccountDeletionRecord", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("DeletedAt");
+
+                    b.ToTable("AccountDeletionRecords");
+                });
+
             modelBuilder.Entity("ExpenseTracker.Api.Models.GoalContribution", b =>
                 {
                     b.Property<Guid>("GoalId")
@@ -527,6 +543,10 @@ namespace ExpenseTracker.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DataExportRequestedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Email")

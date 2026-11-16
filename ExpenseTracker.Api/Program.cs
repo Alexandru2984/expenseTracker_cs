@@ -82,6 +82,7 @@ try
     builder.Services.AddScoped<NotificationEngine>();
     builder.Services.AddSingleton<MfaSecrets>();
     builder.Services.AddScoped<MfaService>();
+    builder.Services.AddScoped<AccountArchive>();
 
     // Background housekeeping (skipped under the in-memory test provider, which
     // doesn't support the bulk ExecuteDelete used by the cleanup).
