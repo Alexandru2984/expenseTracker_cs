@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import FinanceIntegrationPanel from './FinanceIntegrationPanel.vue'
 import SessionPanel from './SessionPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
+import MfaPanel from './MfaPanel.vue'
 import { useDialog } from '../useDialog.js'
 import { useCooldown } from '../useCooldown.js'
 import { accountApi, authApi } from '../api.js'
@@ -14,6 +15,8 @@ useDialog(dialog, () => emit('close'))
 
 const account = ref(null)
 const loading = ref(true)
+const sessionRevision = ref(0)
+function mfaChanged() { sessionRevision.value++; load() }
 
 // change password
 const currentPassword = ref('')
@@ -206,9 +209,10 @@ const inputCls = 'w-full bg-gray-50 dark:bg-gray-800 border-none rounded-xl px-4
             <button :disabled="emailBusy" class="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Verifică adresa curentă</button>
           </form>
 
+          <MfaPanel @toast="(...args) => emit('toast', ...args)" @changed="mfaChanged" />
           <NotificationPanel :email="account.email ?? ''" :verified="account.emailVerified" @toast="(...args) => emit('toast', ...args)" />
           <FinanceIntegrationPanel @toast="(...args) => emit('toast', ...args)" />
-          <SessionPanel @toast="(...args) => emit('toast', ...args)" @logout="emit('logout')" />
+          <SessionPanel :key="sessionRevision" @toast="(...args) => emit('toast', ...args)" @logout="emit('logout')" />
 
           <!-- Logout everywhere -->
           <div class="pt-2 border-t border-gray-100 dark:border-gray-800">

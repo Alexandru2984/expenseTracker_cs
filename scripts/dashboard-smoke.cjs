@@ -48,7 +48,8 @@ function month(offset) { const value = new Date(); value.setUTCDate(1); value.se
     const request = route.request(), url = new URL(request.url()); let data = {}, status = 200;
     const active = items.filter(s => s.isActive);
     const byCurrency = [...new Set(active.map(s => s.currency))].map(currency => ({ currency, activeCount: active.filter(s => s.currency === currency).length, monthlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost, 0), yearlyTotal: active.filter(s => s.currency === currency).reduce((sum, s) => sum + s.cost * 12, 0) }));
-    if (url.pathname.startsWith('/api/account/notifications')) data = notificationFixture(url.pathname);
+    if (url.pathname === '/api/account/mfa') data = { enabled: false, available: true, recoveryCodesRemaining: 0, pendingSetupId: null };
+    else if (url.pathname.startsWith('/api/account/notifications')) data = notificationFixture(url.pathname);
     else if (url.pathname === '/api/goals') data = [];
     else if (url.pathname === '/api/auth/me') data = { username: 'dashboard-fixture', accountContext: 'A'.repeat(64) };
     else if (url.pathname === '/api/auth/logout') { status = 204; data = null; }

@@ -23,7 +23,8 @@ const AxeBuilder=require(require.resolve('@axe-core/playwright',{paths:[dependen
    let tokens=[];const fake='fin_'+'a'.repeat(43);const id='00000001-0000-0000-0000-000000000000';
    await page.route('**/api/**',async route=>{
     const request=route.request(),url=new URL(request.url());let data={};let status=200;
-    if(url.pathname.startsWith('/api/account/notifications'))data=notificationFixture(url.pathname);
+    if (url.pathname === '/api/account/mfa') data = { enabled: false, available: true, recoveryCodesRemaining: 0, pendingSetupId: null };
+    else if(url.pathname.startsWith('/api/account/notifications'))data=notificationFixture(url.pathname);
     else if(url.pathname==='/api/auth/me')data={username:'synthetic-user',accountContext:'A'.repeat(64)};
     else if(url.pathname==='/api/account')data={username:'synthetic-user',email:'fixture@example.invalid',emailVerified:true,createdAt:new Date().toISOString()};
     else if(url.pathname==='/api/account/finance-tokens'){

@@ -88,7 +88,7 @@ api.interceptors.response.use(
       return Promise.reject(new axios.CanceledError('Contul activ s-a schimbat.'))
     }
     const url = original?.url ?? ''
-    const isAuthCall = /\/auth\/(login|register|refresh|logout|verify-email|resend-code|forgot-password|reset-password)/.test(url)
+    const isAuthCall = /\/auth\/(login|mfa-login|mfa-cancel|register|refresh|logout|verify-email|resend-code|forgot-password|reset-password)/.test(url)
 
     if (status === 401 && original && !original._retry && !original._skipRefresh && !isAuthCall) {
       original._retry = true
@@ -160,6 +160,8 @@ async function cookieMutation(method, url, data, { identity = false, clear = fal
 
 export const authApi = {
   login: (data) => cookieMutation('post', '/auth/login', data),
+  mfaLogin: data => cookieMutation('post', '/auth/mfa-login', data),
+  cancelMfa: data => api.post('/auth/mfa-cancel', { ...data, code: 'cancel' }, { _skipRefresh: true }),
   register: (data) => api.post('/auth/register', data),
   verifyEmail: (data) => cookieMutation('post', '/auth/verify-email', data),
   resendCode: (data) => api.post('/auth/resend-code', data),
@@ -209,6 +211,15 @@ export const notificationsApi = {
   zones: () => api.get('/account/notifications/time-zones'),
   preview: () => api.get('/account/notifications/preview'),
   history: () => api.get('/account/notifications/history')
+}
+
+export const mfaApi = {
+  get: () => api.get('/account/mfa'),
+  setup: data => api.post('/account/mfa/setup', data),
+  cancel: setupId => api.delete('/account/mfa/setup', { params: { setupId } }),
+  confirm: data => cookieMutation('post', '/account/mfa/confirm', data, { identity: true }),
+  recovery: data => api.post('/account/mfa/recovery-codes', data),
+  disable: data => cookieMutation('post', '/account/mfa/disable', data, { identity: true })
 }
 
 export const subscriptionsApi = {

@@ -13,6 +13,7 @@ const email = ref('')
 const password = ref('')
 const code = ref('')
 const newPassword = ref('')
+const mfaChallenge = ref(''), mfaCode = ref(''), recoveryMode = ref(false)
 
 const verifyUsername = ref('') // account awaiting email verification
 const resetEmail = ref('')     // account awaiting password reset
@@ -28,15 +29,18 @@ const titles = {
   register: 'Creează un cont nou.',
   verify: 'Verifică-ți adresa de email.',
   forgot: 'Resetare parolă.',
-  reset: 'Introdu codul și noua parolă.'
+  reset: 'Introdu codul și noua parolă.',
+  mfa: 'Verificare în doi pași.'
 }
 const subtitle = computed(() => titles[mode.value])
 
 function go(next) {
   if (loading.value) return
+  if (mode.value === 'mfa' && mfaChallenge.value) authApi.cancelMfa({ challengeToken: mfaChallenge.value }).catch(() => {})
   error.value = ''
   info.value = ''
   mode.value = next
+  if (next !== 'mfa') { mfaChallenge.value = ''; mfaCode.value = ''; recoveryMode.value = false }
 }
 
 async function submit() {
@@ -50,8 +54,16 @@ async function submit() {
     if (mode.value === 'verify') return await doVerify()
     if (mode.value === 'forgot') return await doForgot()
     if (mode.value === 'reset') return await doReset()
+    if (mode.value === 'mfa') {
+      const response = await authApi.mfaLogin({ challengeToken: mfaChallenge.value, code: mfaCode.value.trim() })
+      mfaCode.value = ''; mfaChallenge.value = ''
+      emit('login', response.data)
+    }
   } catch (e) {
     error.value = apiError(e)
+    if (mode.value === 'mfa' && e.response?.data?.code === 'mfa_restart_required') {
+      mode.value = 'login'; mfaChallenge.value = ''; mfaCode.value = ''; password.value = ''
+    }
   } finally {
     loading.value = false
   }
@@ -68,6 +80,12 @@ async function doLogin() {
   }
   try {
     const res = await authApi.login({ username: username.value.trim(), password: password.value })
+    if (res.data.requiresTwoFactor) {
+      password.value = ''; mfaChallenge.value = res.data.challengeToken; mfaCode.value = ''
+      recoveryMode.value = false; mode.value = 'mfa'
+      info.value = 'Introdu codul curent din autentificator. Verificarea este valabilă cinci minute.'
+      return
+    }
     emit('login', res.data)
   } catch (e) {
     // Account exists but email not verified → jump to the verify screen.
@@ -169,7 +187,8 @@ const submitLabel = computed(() => {
     register: 'Creează cont',
     verify: 'Verifică și intră',
     forgot: 'Trimite codul',
-    reset: 'Resetează parola'
+    reset: 'Resetează parola',
+    mfa: 'Verifică MFA și intră'
   }[mode.value]
 })
 </script>
@@ -192,6 +211,12 @@ const submitLabel = computed(() => {
       </div>
 
       <form @submit.prevent="submit" class="space-y-4">
+        <div v-if="mode === 'mfa'" class="space-y-3">
+          <label for="login-mfa-code" class="block text-xs font-bold text-gray-600 dark:text-gray-300">{{ recoveryMode ? 'Cod de recuperare' : 'Cod din autentificator' }}</label>
+          <input id="login-mfa-code" v-model="mfaCode" :disabled="loading" required :maxlength="recoveryMode ? 30 : 6" :pattern="recoveryMode ? undefined : '[0-9]{6}'" :inputmode="recoveryMode ? 'text' : 'numeric'" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" class="w-full min-w-0 bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3 text-gray-900 dark:text-white text-center" />
+          <button type="button" @click="recoveryMode = !recoveryMode; mfaCode = ''" :disabled="loading" class="text-xs underline text-indigo-700 dark:text-indigo-300">{{ recoveryMode ? 'Folosește aplicația de autentificare' : 'Folosește un cod de recuperare' }}</button>
+          <p class="text-xs text-gray-600 dark:text-gray-300">Codurile de recuperare sunt de unică folosință. Dacă ai folosit deja codul din aplicație, așteaptă următorul cod.</p>
+        </div>
         <!-- Username (login / register) -->
         <div v-if="mode === 'login' || mode === 'register'">
           <label for="login-username" class="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Username</label>

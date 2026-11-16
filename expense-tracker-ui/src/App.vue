@@ -163,10 +163,10 @@ async function handleLogout() {
 }
 function onAuthLogout() { resetAuthState() }
 function onSessionBoundary() { resetAuthState(); authReady.value = false; bootstrapAuth() }
-function onSettingsHash() { if (isAuthenticated.value && window.location.hash === '#notifications') showSettings.value = true }
+function onSettingsHash() { if (isAuthenticated.value && ['#notifications', '#security'].includes(window.location.hash)) showSettings.value = true }
 function onSettingsClose() {
   showSettings.value = false
-  if (window.location.hash === '#notifications') history.replaceState(null, '', window.location.pathname + window.location.search)
+  if (['#notifications', '#security'].includes(window.location.hash)) history.replaceState(null, '', window.location.pathname + window.location.search)
   fetchAccount()
 }
 

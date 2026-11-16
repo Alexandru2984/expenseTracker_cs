@@ -44,7 +44,8 @@ const username='N'.repeat(50),email='a'.repeat(64)+'@'+'d'.repeat(60)+'.example.
       data={localDate:new Date().toISOString().slice(0,10),renewalCount:2,trialCount:0,goalCount:1,items:[],
        messageText:'Rezumat privat: 2 scadențe și 1 obiectiv.\n'+(preferences.includeNames?literal:'Numele nu sunt incluse.')+'\nhttps://expenses.micutu.com/#notifications'};
      }else throw Error('Unknown notification fixture endpoint '+p);
-    }else if(p==='/api/auth/me'){if(authed)data={username,accountContext:'A'.repeat(64)};else status=401;}
+    }else if(p==='/api/account/mfa')data={enabled:false,available:true,recoveryCodesRemaining:0,pendingSetupId:null};
+    else if(p==='/api/auth/me'){if(authed)data={username,accountContext:'A'.repeat(64)};else status=401;}
     else if(p==='/api/auth/refresh')status=401;
     else if(p==='/api/auth/logout'){authed=false;status=204;}
     else if(p==='/api/account')data={username,email,emailVerified:true};

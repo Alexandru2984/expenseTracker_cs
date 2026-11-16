@@ -106,6 +106,10 @@ jobs:
         working-directory: expense-tracker-ui
         run: npm run test:notifications
 
+      - name: MFA enrollment, recovery, login, mobile and accessibility
+        working-directory: expense-tracker-ui
+        run: npm run test:mfa
+
   docker:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
