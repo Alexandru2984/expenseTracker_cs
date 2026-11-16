@@ -104,3 +104,9 @@ locală; nu sunt raportate calcule automate sau verificări de conformitate fict
 Criterii de lansare: teste PostgreSQL, izolare și idempotency, UI mobil/WCAG,
 regresii Finance/sesiuni, migrație restaurată și repetată, API vechi compatibil,
 backup privat, fără restart DB. Verdictul final se bazează pe dovezile din audit.
+
+Lansare verificată: revizia 8f8ac08, backup restaurat, migrație 12 → 13 repetată
+idempotent, API vechi/nou compatibile, 204 teste backend fără skip și matricea
+browser trecută. Verdict tehnic: criteriile acestei lansări au trecut. Nu se
+declară rezolvate alertarea externă, backupul off-site sau răspunsul uman on-call.
+Dovezi și backup/rollback: [audit](AUDIT-AND-ROADMAP.md).

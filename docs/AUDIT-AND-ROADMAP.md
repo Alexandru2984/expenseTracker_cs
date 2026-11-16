@@ -499,3 +499,36 @@ după verificarea buildului final.
 Următoarea etapă: notificări opt-in cu outbox, preferințe și fus orar. MFA/passkeys,
 portabilitatea/ștergerea contului, alertarea externă și backupul off-site rămân
 deschise. Nu sunt declarate implementate prin această etapă.
+
+## Lansare obiective de economisire — 16 noiembrie
+
+Cod activ: `8f8ac085076cfb4af1dced6a94bcb68e919427bd`; revizia UI publică și
+eticheta imaginii API corespund. Implementare în `8d7dd6f`, corecție calendar și
+verificări CSRF/Finance în `02e2736`, UI și regresii în `8f8ac08`.
+Backup/rollback privat: `/var/backups/expense-tracker/deploy-20261116T003837Z`.
+
+Backupul a fost restaurat izolat: 0 conturi și 0 abonamente la snapshot. Migrația
+12 → 13 a trecut, repetarea este idempotentă, iar imaginile API veche/nouă au
+trecut probele de citire a utilizatorilor pe schema extinsă. Numărul de conturi
+și abonamente s-a păstrat în probă. Migrația activă adaugă numai tabelele/indexurile
+obiectivelor și contribuțiilor, fără modificarea înregistrărilor existente.
+PostgreSQL are același ID și StartedAt ca înainte; nu a fost restartat.
+
+API healthy, zero restarturi. Compose implicit rezolvă exact imaginea activă,
+mediul DB corespunde configurației, iar dry-run-ul raportează API Running fără
+recreare. Snapshotul nginx reflectă noul release. Health public 200; opt rute
+private, inclusiv obiectivele și istoricul lor, 401/no-store și un singur
+X-Frame-Options DENY. Nonce CSP distinct între două răspunsuri HTML.
+Chromium la 390 px: login vizibil, fără overflow, erori JS sau încălcări CSP.
+F# HttpClient confirmă 401/no-store pentru snapshot și istoricul Finance;
+contractul v1 rămâne compatibil, fără datele obiectivelor.
+
+Validare: 204 teste backend, cu integrarea PostgreSQL și fără skip; 444 execuții
+dashboard; 168 aserțiuni obiective; 58 între taburi; 24 Finance; 4 deployment.
+Probele de obiective acoperă ambele teme și 1440/390/320 px, WCAG, persistență,
+HTML afișat ca text, retry fără dublare, istoric paginat, conflicte, țintă atinsă,
+arhivare/reactivare și ștergere confirmată. Buildul final a trecut din nou suitele
+obiective/sesiuni/Finance. Nu s-au creat conturi sau trimis emailuri în producție.
+Commiturile sunt locale, cu identitatea Git existentă, fără atribuire AI.
+Nu s-a făcut push sau rulat workflow-ul remote. Documentarea ulterioară nu
+schimbă revizia de cod activă.
