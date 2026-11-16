@@ -42,7 +42,9 @@ Schimbarea preferințelor și emailului folosește lock-ul de cont existent;
 anularea Pending/Preparing este atomică și nu depinde de o versiune de lease
 citită înaintea unui claim concurent. Nu se țin lock-uri DB în timpul SMTP.
 Workerul procesează loturi limitate și șterge progresiv rândurile terminale
-mai vechi de 30 de zile. Backupurile private au politica lor de retenție;
+mai vechi de 30 de zile. Un ciclu selectează maximum 50 de preferințe și expediază
+maximum 10 mesaje, apoi așteaptă un minut; capacitatea nu este prezentată ca SLA.
+Backupurile private au politica lor de retenție;
 nu se afirmă ștergerea automată a tuturor copiilor.
 
 ## Timp, recuperare și livrare
@@ -65,6 +67,10 @@ după 5 și 30 minute, maximum trei încercări. O eroare ambiguă în timpul DA
 un sender care aruncă o excepție necunoscută produce Uncertain. Message-ID este
 stabil pe rând, dar nu este tratat ca o garanție de deduplicare a providerului.
 Un ACK târziu nu suprascrie recuperarea lease-ului. Separarea erorilor se bazează
+pe un timeout separat pentru salvarea confirmării. Expirarea acestui timeout
+nu termină workerul; numai anularea cerută de host oprește bucla. Cazul este
+verificat pe PostgreSQL prin blocarea controlată a tabelului în timpul ACK-ului.
+Clasificarea erorilor SMTP se bazează
 pe [implementarea MailKit 4.17.0 folosită de proiect](https://github.com/jstedfast/MailKit/blob/4.17.0/MailKit/Net/Smtp/SmtpClient.cs).
 
 Sent înseamnă acceptat de serverul SMTP, nu livrat în inbox. Nu există promisiune

@@ -225,6 +225,43 @@ public class NotificationTests(TestApiFactory factory)
     }
 
     [PostgresFact]
+    public async Task An_ack_timeout_does_not_terminate_the_background_worker()
+    {
+        using var seed=factory.Services.CreateScope();var db=seed.ServiceProvider.GetRequiredService<AppDbContext>();
+        await Seed(db);
+        var services=new ServiceCollection();services.AddLogging();
+        services.AddSingleton(seed.ServiceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>());
+        services.AddSingleton(seed.ServiceProvider.GetRequiredService<AuthTokenService>());
+        var options=seed.ServiceProvider.GetRequiredService<DbContextOptions<AppDbContext>>();
+        services.AddScoped(_=>new AppDbContext(options));services.AddScoped<EmailService>();services.AddScoped<VerificationService>();
+        services.AddScoped<NotificationContent>();services.AddScoped<NotificationEngine>();
+        services.AddSingleton<TimeProvider>(new ReminderClock(FixedNow));
+        var sender=new RecordingReminderSender();services.AddSingleton<IReminderEmailSender>(sender);
+        using var provider=services.BuildServiceProvider();
+        await using var connection=new Npgsql.NpgsqlConnection(db.Database.GetConnectionString());
+        await connection.OpenAsync();await using var transaction=await connection.BeginTransactionAsync();
+        var blocked=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        sender.DuringSend=async()=>{
+            await using var command=new Npgsql.NpgsqlCommand("LOCK TABLE \"NotificationOutbox\" IN ACCESS EXCLUSIVE MODE",connection,transaction);
+            await command.ExecuteNonQueryAsync();blocked.TrySetResult();
+        };
+        using var worker=new NotificationWorker(provider.GetRequiredService<IServiceScopeFactory>(),NullLogger<NotificationWorker>.Instance);
+        await worker.StartAsync(default);
+        try
+        {
+            await blocked.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            await Task.Delay(TimeSpan.FromSeconds(7)); // The ACK has its own five-second deadline.
+            Assert.False(worker.ExecuteTask!.IsCompleted);
+        }
+        finally
+        {
+            await transaction.RollbackAsync();
+            await worker.StopAsync(default);
+        }
+        // Sending remains eligible for conservative lease recovery after the ACK timeout.
+    }
+
+    [PostgresFact]
     public async Task Preview_excludes_foreign_paused_past_and_completed_items_and_does_not_move_money()
     {
         using var scope=factory.Services.CreateScope(); var db=scope.ServiceProvider.GetRequiredService<AppDbContext>();

@@ -218,7 +218,8 @@ public sealed class NotificationWorker(IServiceScopeFactory scopes, ILogger<Noti
                 for (var i = 0; i < 10 && !stoppingToken.IsCancellationRequested; i++)
                     if (!await engine.DispatchOne(stoppingToken)) break;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception ex)
             { logger.LogError("Notification worker failed: {ExceptionType}", ex.GetType().Name); }
             try { await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken); }
             catch (OperationCanceledException) { break; }
