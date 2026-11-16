@@ -131,8 +131,26 @@ fs.mkdirSync(screenshots, { recursive: true });
    await page.getByRole('button', { name: 'Elimină contribuția', exact: true }).click();
    await page.getByText('Contribuție eliminată.', { exact: true }).waitFor();
    assert.equal(entries.length, 24); checks++;
+   // The success toast appears before the user has seen the settled page. Wait
+   // for the refreshed history, closed confirmation and unobscured controls.
+   await panel.getByText('1–20 din 24', { exact: true }).waitFor();
+   await page.getByRole('dialog').waitFor({ state: 'detached' });
+   await page.waitForFunction(() => {
+    const panel = document.querySelector('#goals-panel');
+    return panel?.getAttribute('aria-busy') === 'false' && !panel.querySelector('[role="status"]')
+      && [...panel.querySelectorAll('button:not(:disabled)')].every(button => getComputedStyle(button).opacity === '1');
+   });
+   await page.waitForFunction(() => !document.querySelector('.fixed[aria-live="polite"]')?.textContent?.trim());
+   await page.evaluate(() => document.fonts.ready);
    const audit = await new AxeBuilder({ page }).include('#goals-panel').withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
-   assert.deepEqual(audit.violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)})), []); checks++;
+   if (audit.violations.length) {
+    const diagnostics = path.resolve(__dirname, '../.artifacts/ci');
+    fs.mkdirSync(diagnostics, { recursive: true });
+    const prefix = path.join(diagnostics, `goals-${width}-${theme}`);
+    fs.writeFileSync(prefix + '-axe.json', JSON.stringify(audit.violations, null, 2));
+    await page.screenshot({ path: prefix + '.png', fullPage: true });
+   }
+   assert.deepEqual(audit.violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target),details:v.nodes.map(n=>n.failureSummary)})), [], `Goals WCAG at ${width}/${theme}`); checks++;
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth), false); checks++;
    assert.equal(await panel.getByRole('list', { name: 'Istoricul contribuțiilor' }).evaluate(el => el.scrollHeight > el.clientHeight), true); checks++;
    await panel.screenshot({ path: path.join(screenshots, 'goals-' + width + '-' + theme + '.png'), style: 'header, [aria-live="polite"] { visibility: hidden !important; }' });
