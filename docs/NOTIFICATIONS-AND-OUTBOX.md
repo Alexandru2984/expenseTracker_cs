@@ -66,8 +66,8 @@ de 20 secunde. Erorile sigure de conexiune/respingere temporară pot fi reluate
 după 5 și 30 minute, maximum trei încercări. O eroare ambiguă în timpul DATA sau
 un sender care aruncă o excepție necunoscută produce Uncertain. Message-ID este
 stabil pe rând, dar nu este tratat ca o garanție de deduplicare a providerului.
-Un ACK târziu nu suprascrie recuperarea lease-ului. Separarea erorilor se bazează
-pe un timeout separat pentru salvarea confirmării. Expirarea acestui timeout
+Un ACK târziu nu suprascrie recuperarea lease-ului. Salvarea confirmării are
+un timeout separat. Expirarea acestui timeout
 nu termină workerul; numai anularea cerută de host oprește bucla. Cazul este
 verificat pe PostgreSQL prin blocarea controlată a tabelului în timpul ACK-ului.
 Clasificarea erorilor SMTP se bazează
@@ -117,3 +117,10 @@ Auditul a confirmat separat expunerea inutilă a secretelor JWT/SMTP în mediul
 containerului PostgreSQL, prin env_file comun. Remedierea este descrisă în
 [DATABASE-ENVIRONMENT-ISOLATION.md](DATABASE-ENVIRONMENT-ISOLATION.md).
 Verdictul de lansare se consemnează după teste și restore drill.
+
+Lansare verificată: cod 3b4e31a; 229 teste backend fără skip, 826 execuții de
+aserțiuni browser și 10 teste de operațiuni. Migrația 13 → 14 a trecut pe backup
+restaurat, repetată idempotent, cu API vechi/nou compatibile. Proba Alpine reală
+confirmă enumerarea IANA și DST. SMTP real a trecut TLS/auth/NOOP, fără mesaje.
+Nu s-au creat conturi sau trimis emailuri de test în producție. Verdict tehnic:
+criteriile acestei lansări au trecut; alertarea externă/on-call rămâne deschisă.

@@ -37,3 +37,10 @@ funcțională și nu se declară remediere.
 PGDATA neschimbate și refuzul imaginilor mutable, volumelor/porturilor/configurației
 neprevăzute. După remediere, un dry-run Compose general trebuie evaluat fără
 recreări neașteptate; nu se rulează down -v și nu se modifică serviciile altor repo-uri.
+
+Activare verificată la 16.11.2026: backup restaurat înainte de recreare,
+14 variabile de aplicație eliminate efectiv. Imaginea, numele volumului și volumul
+creat anterior containerului original sunt păstrate. API healthy după reconectare.
+Backup/rollback: /var/backups/expense-tracker/db-env-20261116T052835Z.
+DB a fost recreat intenționat pentru acest fix; nu se declară fără restart pe
+întreaga etapă. Deploymenturile ulterioare ale API-ului nu au recreat DB.

@@ -559,3 +559,55 @@ total. Activarea necesită recrearea controlată a containerului DB, cu păstrar
 datelor; nu este declarată efectuată numai prin editarea sursei.
 [Runbook](DATABASE-ENVIRONMENT-ISOLATION.md). Rezultatele activării și migrației
 13 → 14 se consemnează după lansare. Probele SMTP sunt exclusiv sintetice.
+
+## Lansare notificări și izolare DB — 16 noiembrie
+
+Cod activ final: `3b4e31a`; revizia UI publică și imaginea API corespund.
+Commituri implementare: `8680e54` (outbox și consimțământ), `ad30111` (izolare DB),
+`6aa5c33` (probă de drift rețea), `4a0f3b3` (UI și regresii), `3b4e31a`
+(workerul continuă după timeoutul intern de ACK).
+
+Backupuri/rollback private:
+
+- `/var/backups/expense-tracker/db-env-20261116T052835Z`: restaurare verificată,
+  configurație anterioară DB și dovada eliminării celor 14 variabile ale aplicației.
+- `/var/backups/expense-tracker/deploy-20261116T052959Z`: restaurare, migrație
+  13 → 14, repetare idempotentă și probe de citire cu API-ul vechi/nou.
+- `/var/backups/expense-tracker/deploy-20261116T053929Z`: backup restaurat înaintea
+  corecției finale de reziliență; fără altă modificare de schemă.
+
+La izolarea mediului, containerul DB a fost recreat controlat. Imaginea exactă și
+volumul cu date au fost păstrate; volumul este anterior containerului original.
+JWT/SMTP și celelalte configurații ale aplicației sunt absente din mediul DB.
+Digestul PostgreSQL din Compose corespunde imaginii care rula înaintea fixului.
+Nu s-a făcut upgrade implicit sau restore peste datele active. Cele două lansări
+ulterioare de API nu au recreat DB; ID-ul și StartedAt sunt aceleași ca imediat
+după izolarea controlată. Schema activă are 14 migrații.
+
+API final healthy, zero restarturi. Pin-ul API și digestul DB corespund imaginilor
+active; dry-run pentru ambele servicii raportează Running, fără recreări.
+Nginx din ops reflectă release-ul activ. Health public 200; 12 rute private,
+inclusiv setări/preview/istoric/fusuri, 401/no-store și un singur X-Frame-Options
+DENY. Nonce CSP distinct între răspunsuri HTML. Chromium public la 390 px, cu link
+direct către notificări: cere login, fără overflow, erori JS sau încălcări CSP.
+F# HttpClient confirmă 401/no-store pentru snapshot și istoricul Finance.
+
+Validare: 229 teste backend, cu integrarea PostgreSQL și fără skip; 444 execuții
+dashboard, 168 obiective, 58 între taburi, 24 Finance și 132 notificări (826 în
+total); 10 teste operațiuni. Matricea browser acoperă 1440/390/320 px, light/dark,
+WCAG, consimțământ, eroare/retry, opt-out când transportul este indisponibil,
+HTML afișat ca text și răspunsuri întârziate după logout. Timeoutul intern de
+ACK este reprodus cu lock PostgreSQL și nu mai închide workerul. Imaginea Alpine
+finală trece proba de enumerare IANA și DST.
+
+Transportul SMTP real a trecut conectarea TLS, autentificarea și NOOP din aceeași
+rețea/imagine ca API-ul, fără MAIL/DATA sau trimitere de mesaj. Testele livrării
+și retry-ului folosesc senderi sintetici; nu se declară verificată sosirea unui
+email real în inbox. La verificarea producției: 0 conturi, 0 preferințe activate,
+0 rânduri outbox; nu s-au creat conturi și nu s-au trimis emailuri de test.
+Logurile release-ului final nu arată erori ale workerului.
+
+Commituri locale sub identitatea existentă, fără atribuire AI; fără push sau CI
+remote. Documentarea de după lansare nu schimbă revizia de cod activă. MFA/passkeys,
+portabilitatea/ștergerea contului, alertarea externă și backupul off-site rămân
+priorități deschise, neimplementate prin această etapă.
